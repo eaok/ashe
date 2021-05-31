@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -32,7 +33,11 @@ func ReadConfig() string {
 	err = json.Unmarshal(file, &config)
 	checkError(err)
 
-	Token = config.Token
+	// decode token
+	token, err := base64.StdEncoding.DecodeString(config.Token)
+	checkError(err)
+
+	Token = string(token)
 	Prefix = config.Prefix
 	fmt.Println("Got Token:  " + config.Token)
 	fmt.Println("Got Prefix: " + config.Prefix)
