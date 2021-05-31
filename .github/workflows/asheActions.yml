@@ -1,0 +1,25 @@
+name: ashe actions
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+
+  runAshe:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.15
+
+    - name: Test
+      run: go test -v ./...
+
+    - name: Run
+      run: |
+        go mod tidy
+        go run -v main.go
