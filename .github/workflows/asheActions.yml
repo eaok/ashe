@@ -21,5 +21,4 @@ jobs:
 
     - name: Run
       run: |
-        go mod tidy
-        go run -v main.go
+        go run main.go

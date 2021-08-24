@@ -39,8 +39,8 @@ func ReadConfig() string {
 
 	Token = string(token)
 	Prefix = config.Prefix
-	fmt.Println("Got Token:  " + config.Token)
-	fmt.Println("Got Prefix: " + config.Prefix)
+	fmt.Println("Got Token:  " + Token)
+	fmt.Println("Got Prefix: " + Prefix)
 
 	return config.Token
 }

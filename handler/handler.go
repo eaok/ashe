@@ -7,12 +7,25 @@ import (
 
 	"github.com/Necroforger/dgwidgets"
 	"github.com/bwmarrin/discordgo"
+	"github.com/eaok/ashe/config"
 	"github.com/eaok/ashe/print"
+	"github.com/eaok/ashe/widget"
 )
+
+// add order prefix
+func RemovePrefix(m *discordgo.MessageCreate) string {
+	if config.Prefix != "" && strings.HasPrefix(m.Content, config.Prefix) {
+		return strings.TrimPrefix(m.Content, config.Prefix)
+	}
+
+	return ""
+}
 
 // delete not queue messages, just keep 20s
 func AutoDelete(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if m.Author.ID != s.State.User.ID || !strings.Contains(m.Content, "RED STAR QUEUE") {
+	// if m.Author.ID != s.State.User.ID || !strings.Contains(m.Content, "RED STAR QUEUE") {
+	if m.Author.ID != s.State.User.ID {
+		fmt.Println("queue ", m.Content)
 		go func() {
 			time.Sleep(20 * time.Second)
 			s.ChannelMessageDelete(m.ChannelID, m.ID)
@@ -26,7 +39,7 @@ func Ping(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 	// If the message is "ping" reply with "Pong!"
-	if m.Content == "ping" {
+	if RemovePrefix(m) == "ping" {
 		s.ChannelMessageSend(m.ChannelID, "pong")
 		fmt.Printf("%-10s\t", m.Content)
 		print.ColorPrint(34, 0, "pong")
@@ -39,7 +52,7 @@ func Avatar(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if m.Content == "avatar" {
+	if RemovePrefix(m) == "avatar" {
 		s.ChannelMessageSend(m.ChannelID, m.Author.AvatarURL("2048"))
 		fmt.Printf("%-10s\t", m.Content)
 		print.ColorPrint(34, 0, m.Author.AvatarURL("2048"))
@@ -52,7 +65,7 @@ func Pic(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if m.Content == "pic" {
+	if RemovePrefix(m) == "pic" {
 		s.ChannelMessageSend(m.ChannelID, "https://cdn.jsdelivr.net/gh/eaok/img/docker/components-of-kubernetes.png")
 		fmt.Printf("%-10s\t", m.Content)
 		print.ColorPrint(34, 0, "https://cdn.jsdelivr.net/gh/eaok/img/docker/components-of-kubernetes.png")
@@ -65,7 +78,7 @@ func Emoji(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if m.Content == "emoji" {
+	if RemovePrefix(m) == "emoji" {
 		s.ChannelMessageSend(m.ChannelID, ":one:")
 		fmt.Printf("%-10s\t", m.Content)
 		print.ColorPrint(34, 0, ":one:")
@@ -78,7 +91,7 @@ func Username(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if m.Content == "username" {
+	if RemovePrefix(m) == "username" {
 		s.ChannelMessageSend(m.ChannelID, "Your username is "+m.Message.Author.Username)
 		fmt.Printf("%-10s\t", m.Content)
 		print.ColorPrint(34, 0, "Your username is "+m.Message.Author.Username)
@@ -86,7 +99,7 @@ func Username(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func Page(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if m.Content == "page" {
+	if RemovePrefix(m) == "page" {
 		p := dgwidgets.NewPaginator(s, m.ChannelID)
 
 		// Add embed pages to paginator
@@ -123,40 +136,33 @@ func Queue(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// log.Println(m.GuildID) // 工会id 848081055029788673
 	// log.Println(m.ID)      // 消息id 848535718790955008
 
-	// var reaction *discordgo.MessageReaction
-	// for {
-	// 	k := <-nextMessageReactionAddC(s)
-	// 	reaction = k.MessageReaction
+	if RemovePrefix(m) == "queue" {
+		go func() {
+			widget.BeginChan <- 1
+		}()
 
-	// 	// Ignore reactions sent by bot
-	// 	if reaction.MessageID != m.Message.ID || s.State.User.ID == reaction.UserID {
-	// 		continue
-	// 	}
+		for {
+			if <-widget.BeginChan == 1 {
+				go func() {
+					p := widget.NewPaginator(s, m.ChannelID)
 
-	// 	s.AddHandler(EmojiCheckMark, func(w *Widget, r *discordgo.MessageReaction) {
-	// 		if err := p.NextPage(); err == nil {
-	// 			p.Update()
-	// 		}
-	// 	})
-	// }
-
-	if m.Content == "queue" {
-		text := fmt.Sprintf("**RED STAR QUEUE [%d/4]**\n", 1)
-		text += fmt.Sprintf("Members joined:👇  |  🔴RS level: @RS%d\n", 9)
-		text += fmt.Sprintf("Use ✅ to join, ❎ to leave or 🛑 to start in %d.\n", 2)
-		text += "Bored while waiting? Type !guide to refresh your knowledge!\n"
-		text += fmt.Sprintf("RS9 #%d•今天%d:%d", 44, time.Now().Hour(), time.Now().Minute())
-		s.ChannelMessageSend(m.ChannelID, text)
-		// s.MessageReactionAdd(m.ChannelID, m.Reference().MessageID, "❎")
-		// s.MessageReactionAdd(m.ChannelID, m.Reference().MessageID, "🛑")
-
-		fmt.Printf("%-10s\n", m.Content)
-		print.ColorPrint(34, 0, text)
-	} else if m.Author.ID == s.State.User.ID && strings.Contains(m.Content, "RED STAR QUEUE") {
-		s.MessageReactionAdd(m.ChannelID, m.ID, "✅")
-		// s.AddHandlerOnce(func(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
-		// 	log.Println(s.State.User.Username)
-		// })
+					// Add embed pages to paginator
+					p.Add(
+						&discordgo.MessageEmbed{
+							Description: fmt.Sprintf(widget.Text, 0, 9, "", 0),
+						},
+						&discordgo.MessageEmbed{
+							Description: widget.Text,
+						},
+						&discordgo.MessageEmbed{
+							Description: widget.Text,
+						},
+					)
+					p.SetPageFooters()
+					p.Spawn()
+				}()
+			}
+		}
 	}
 }
 
@@ -166,7 +172,7 @@ func Help(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if m.Content == "help" {
+	if RemovePrefix(m) == "help" {
 		text := ""
 		text += fmt.Sprintf("%-10s\t:\t%s\n", "ping", "responds with pong!")
 		text += fmt.Sprintf("%-10s\t:\t%s\n", "avatar", "responds with your avatar!")
