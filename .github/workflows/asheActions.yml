@@ -1,23 +1,36 @@
 name: ashe actions
 
 on:
-  push:
-    branches: [ master ]
+  workflow_dispatch:
 
 jobs:
 
-  runAshe:
+  runAsheDiscord:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@master
 
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: 1.15
+        go-version: 1.17
 
     - name: Test
       run: go test -v ./...
+
+    - name: Run
+      run: |
+        go run main.go
+
+  runAsheKhl:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@khl
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.17
 
     - name: Run
       run: |
