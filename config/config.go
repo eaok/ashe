@@ -7,15 +7,14 @@ import (
 	"io/ioutil"
 )
 
-type configStruct struct {
-	Token  string `json:"Token"`
-	Prefix string `json:"Prefix"`
+type ConfigData struct {
+	// Debug      string `json:"Debug"`
+	Token      string `json:"Token"`
+	DebugToken string `json:"DebugToken"`
+	Prefix     string `json:"Prefix"`
 }
 
-var (
-	Token  string
-	Prefix string
-)
+var Data = ConfigData{}
 
 func checkError(err error) {
 	if err != nil {
@@ -24,23 +23,31 @@ func checkError(err error) {
 }
 
 // read config.json and get a Token
-func ReadConfig() string {
+func ReadConfig() error {
 	fmt.Println("Reading from config file...")
 	file, err := ioutil.ReadFile("./config/config.json")
 	checkError(err)
 
-	config := configStruct{}
-	err = json.Unmarshal(file, &config)
+	err = json.Unmarshal(file, &Data)
 	checkError(err)
+
+	// debug, err := base64.StdEncoding.DecodeString(Data.Debug)
+	// checkError(err)
+	// Data.Token = string(debug)
 
 	// decode token
-	token, err := base64.StdEncoding.DecodeString(config.Token)
+	token, err := base64.StdEncoding.DecodeString(Data.Token)
 	checkError(err)
+	Data.Token = string(token)
+	debugToken, err := base64.StdEncoding.DecodeString(Data.DebugToken)
+	checkError(err)
+	Data.DebugToken = string(debugToken)
+	Data.DebugToken = "1/MTA0NzY=/XLUOtvHDdNSlFZG7D9OJ+A=="
 
-	Token = string(token)
-	Prefix = config.Prefix
-	fmt.Println("Got Token:  " + Token)
-	fmt.Println("Got Prefix: " + Prefix)
+	// fmt.Println("Got Debug:  " + Data.Debug)
+	fmt.Println("Got Token:  " + Data.Token)
+	fmt.Println("Got DebugToken:  " + Data.DebugToken)
+	fmt.Println("Got Prefix: " + Data.Prefix)
 
-	return config.Token
+	return nil
 }

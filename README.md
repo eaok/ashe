@@ -1,2 +1,8 @@
 # ashe
-hades' star discord bot
+开黑啦机器人，用于游戏 **hades'star**。
+
+## 功能
+- [x] 自助选择角色
+- [x] 红星4人组队
+- [] 蓝星呼叫僚机
+- [] 交易神器

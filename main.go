@@ -6,9 +6,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/bwmarrin/discordgo"
-	"github.com/eaok/ashe/config"
-	"github.com/eaok/ashe/router"
+	"github.com/eaok/khlashe/config"
+	"github.com/eaok/khlashe/router"
+	"github.com/lonelyevil/khl"
+	"github.com/lonelyevil/khl/log_adapter/plog"
+	"github.com/phuslu/log"
 )
 
 func init() {
@@ -17,17 +19,20 @@ func init() {
 }
 
 func main() {
-	// Create a new Discord session using the provided bot token.
-	discord, err := discordgo.New("Bot " + config.Token)
-	if err != nil {
-		fmt.Println("Error creating discord session.")
-		return
-	}
+	s := khl.New(config.Data.Token, plog.NewLogger(&log.Logger{
+		Level: log.ErrorLevel,
+		Writer: &log.ConsoleWriter{
+			ColorOutput:    true,
+			QuoteString:    true,
+			EndWithMessage: true,
+		},
+	}))
 
-	router.Route(discord)
+	// router.InitAction(s)
+	router.Route(s)
 
 	// need to open the socket
-	err = discord.Open()
+	err := s.Open()
 	if err != nil {
 		fmt.Println("error opening connection,", err)
 		return
@@ -36,9 +41,9 @@ func main() {
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 
-	// Cleanly close down the Discord session.
-	discord.Close()
+	// Cleanly close down the KHL session.
+	s.Close()
 }

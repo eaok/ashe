@@ -2,189 +2,151 @@ package handler
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/Necroforger/dgwidgets"
-	"github.com/bwmarrin/discordgo"
-	"github.com/eaok/ashe/config"
-	"github.com/eaok/ashe/print"
-	"github.com/eaok/ashe/widget"
+	"github.com/eaok/khlashe/config"
+	"github.com/lonelyevil/khl"
+	"github.com/phuslu/log"
 )
 
-// add order prefix
-func RemovePrefix(m *discordgo.MessageCreate) string {
-	if config.Prefix != "" && strings.HasPrefix(m.Content, config.Prefix) {
-		return strings.TrimPrefix(m.Content, config.Prefix)
-	}
+func AddReaction(ctx *khl.ReactionAddContext) {
+	fmt.Println("go Reaction add!")
 
-	return ""
-}
-
-// delete not queue messages, just keep 20s
-func AutoDelete(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// if m.Author.ID != s.State.User.ID || !strings.Contains(m.Content, "RED STAR QUEUE") {
-	if m.Author.ID != s.State.User.ID {
-		fmt.Println("queue ", m.Content)
-		go func() {
-			time.Sleep(20 * time.Second)
-			s.ChannelMessageDelete(m.ChannelID, m.ID)
-		}()
+	// 根据userID获取username
+	uv, err := ctx.Session.UserView(ctx.Extra.UserID, ctx.Common.TargetID)
+	if err != nil {
+		log.Error().Err(err).Msg("AddReaction")
 	}
-}
-
-func Ping(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// Ignore all messages created by the bot itself
-	if m.Author.ID == s.State.User.ID {
-		return
-	}
-	// If the message is "ping" reply with "Pong!"
-	if RemovePrefix(m) == "ping" {
-		s.ChannelMessageSend(m.ChannelID, "pong")
-		fmt.Printf("%-10s\t", m.Content)
-		print.ColorPrint(34, 0, "pong")
-	}
-}
-
-func Avatar(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// Ignore all messages created by the bot itself
-	if m.Author.ID == s.State.User.ID {
+	// bot event ignore
+	if uv.Bot {
 		return
 	}
 
-	if RemovePrefix(m) == "avatar" {
-		s.ChannelMessageSend(m.ChannelID, m.Author.AvatarURL("2048"))
-		fmt.Printf("%-10s\t", m.Content)
-		print.ColorPrint(34, 0, m.Author.AvatarURL("2048"))
+	// 角色选择频道
+	if ctx.Extra.ChannelID == config.IDChannelSelectRole {
+		if err := AddRoles(ctx); err != nil {
+			log.Error().Err(err).Msg("AddReaction")
+			return
+		}
+	}
+
+	fmt.Println(ctx.Extra.Emoji.Name, "AddReaction")
+
+	// 这3个emoji的动作传到team gorouting
+	switch ctx.Extra.Emoji.Name {
+	case config.EmojiCheckMark:
+		fallthrough
+	case config.EmojiCrossMark:
+		fallthrough
+	case EmojiHexToDec(config.EmojiStopSign):
+		team.ReactionAdd <- ctx
 	}
 }
 
-func Pic(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// Ignore all messages created by the bot itself
-	if m.Author.ID == s.State.User.ID {
+func DeleteReaction(ctx *khl.ReactionDeleteContext) {
+	fmt.Println("go Reaction delete!")
+
+	// 根据userID获取username
+	uv, err := ctx.Session.UserView(ctx.Extra.UserID, ctx.Common.TargetID)
+	if err != nil {
+		log.Error().Err(err).Msg("DeleteReaction")
+	}
+	// bot event ignore
+	if uv.Bot {
 		return
 	}
 
-	if RemovePrefix(m) == "pic" {
-		s.ChannelMessageSend(m.ChannelID, "https://cdn.jsdelivr.net/gh/eaok/img/docker/components-of-kubernetes.png")
-		fmt.Printf("%-10s\t", m.Content)
-		print.ColorPrint(34, 0, "https://cdn.jsdelivr.net/gh/eaok/img/docker/components-of-kubernetes.png")
-	}
-}
-
-func Emoji(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// Ignore all messages created by the bot itself
-	if m.Author.ID == s.State.User.ID {
-		return
-	}
-
-	if RemovePrefix(m) == "emoji" {
-		s.ChannelMessageSend(m.ChannelID, ":one:")
-		fmt.Printf("%-10s\t", m.Content)
-		print.ColorPrint(34, 0, ":one:")
-	}
-}
-
-func Username(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// Ignore all messages created by the bot itself
-	if m.Author.ID == s.State.User.ID {
-		return
-	}
-
-	if RemovePrefix(m) == "username" {
-		s.ChannelMessageSend(m.ChannelID, "Your username is "+m.Message.Author.Username)
-		fmt.Printf("%-10s\t", m.Content)
-		print.ColorPrint(34, 0, "Your username is "+m.Message.Author.Username)
-	}
-}
-
-func Page(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if RemovePrefix(m) == "page" {
-		p := dgwidgets.NewPaginator(s, m.ChannelID)
-
-		// Add embed pages to paginator
-		p.Add(&discordgo.MessageEmbed{Description: "Page one"},
-			&discordgo.MessageEmbed{Description: "Page two"},
-			&discordgo.MessageEmbed{Description: "Page three"})
-
-		// Sets the footers of all added pages to their page numbers.
-		p.SetPageFooters()
-
-		// When the paginator is done listening set the colour to yellow
-		p.ColourWhenDone = 0xffff
-
-		// Stop listening for reaction events after five minutes
-		p.Widget.Timeout = time.Minute * 5
-
-		// Add a custom handler for the gun reaction.
-		p.Widget.Handle("🔫", func(w *dgwidgets.Widget, r *discordgo.MessageReaction) {
-			s.ChannelMessageSend(m.ChannelID, "Bang!")
-		})
-
-		p.Spawn()
-	}
-}
-
-func Queue(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// log.Println(s.ShardID)
-	// log.Println(s.State.Guilds)
-	// log.Println(s.State.User.Bot)
-	// log.Println(s.State.User.Username)
-	// log.Println(m.Author)    // 发送人名字
-	// log.Println(m.ChannelID) // 频道id 848379994279116831
-	// log.Println(m.Content)
-	// log.Println(m.GuildID) // 工会id 848081055029788673
-	// log.Println(m.ID)      // 消息id 848535718790955008
-
-	if RemovePrefix(m) == "queue" {
-		go func() {
-			widget.BeginChan <- 1
-		}()
-
-		for {
-			if <-widget.BeginChan == 1 {
-				go func() {
-					p := widget.NewPaginator(s, m.ChannelID)
-
-					// Add embed pages to paginator
-					p.Add(
-						&discordgo.MessageEmbed{
-							Description: fmt.Sprintf(widget.Text, 0, 9, "", 0),
-						},
-						&discordgo.MessageEmbed{
-							Description: widget.Text,
-						},
-						&discordgo.MessageEmbed{
-							Description: widget.Text,
-						},
-					)
-					p.SetPageFooters()
-					p.Spawn()
-				}()
-			}
+	// 角色选择频道
+	if ctx.Extra.ChannelID == config.IDChannelSelectRole {
+		if err := DeleteRoles(ctx); err != nil {
+			log.Error().Err(err).Msg("DeleteReaction")
+			return
 		}
 	}
 }
 
-func Help(s *discordgo.Session, m *discordgo.MessageCreate) {
+// auto delete messages
+func AutoDelete(ctx *khl.TextMessageContext) {
+	// non bot messages are automatically deleted
+	if ok := BotTakeOverGroup(ctx.Extra.ChannelName); !ctx.Extra.Author.Bot && ok {
+		go func() {
+			time.Sleep(15 * time.Second)
+			ctx.Session.MessageDelete(ctx.Common.MsgID)
+		}()
+	}
+}
+
+func Ping(ctx *khl.TextMessageContext) {
+	if ctx.Common.Type != khl.MessageTypeText || ctx.Extra.Author.Bot {
+		return
+	}
+	// if strings.Contains(ctx.Common.Content, "ping") {
+	if RemovePrefix(ctx.Common.Content) == "ping" {
+		resp, _ := ctx.Session.MessageCreate(&khl.MessageCreate{
+			MessageCreateBase: khl.MessageCreateBase{
+				TargetID: ctx.Common.TargetID,
+				Content:  "pong",
+			},
+		})
+
+		// bot take over group auto delete message!
+		if BotTakeOverGroup(ctx.Extra.ChannelName) {
+			go func() {
+				time.Sleep(15 * time.Second)
+				ctx.Session.MessageDelete(resp.MsgID)
+			}()
+		}
+	}
+}
+
+func Team(ctx *khl.TextMessageContext) {
+	if RemovePrefix(ctx.Common.Content) == "team" {
+		if team.running {
+			return
+		}
+
+		// go startChannelTeam(config.IDChannelRS11, ctx)
+		// go startChannelTeam(config.IDChannelRS10, ctx)
+		// go startChannelTeam(config.IDChannelRS9, ctx)
+		// go startChannelTeam(config.IDChannelRS8, ctx)
+		go func() {
+			for {
+				chanDone := make(chan bool)
+				go startChannelTeam(config.IDChannelRS7, ctx, chanDone)
+
+				if <-chanDone {
+					fmt.Printf("team has done!")
+				}
+			}
+		}()
+	}
+}
+
+func Help(ctx *khl.TextMessageContext) {
 	// Ignore all messages created by the bot itself
-	if m.Author.ID == s.State.User.ID {
+	if ctx.Extra.Author.Bot {
 		return
 	}
 
-	if RemovePrefix(m) == "help" {
-		text := ""
-		text += fmt.Sprintf("%-10s\t:\t%s\n", "ping", "responds with pong!")
-		text += fmt.Sprintf("%-10s\t:\t%s\n", "avatar", "responds with your avatar!")
-		text += fmt.Sprintf("%-10s\t:\t%s\n", "pic", "responds with a picture!")
-		text += fmt.Sprintf("%-10s\t:\t%s\n", "emoji", "responds with a emoji!")
-		text += fmt.Sprintf("%-10s\t:\t%s\n", "username", "responds with your name!")
-		text += fmt.Sprintf("%-10s\t:\t%s\n", "page", "responds with a page text!")
-		text += fmt.Sprintf("%-10s\t:\t%s\n", "queue", "responds with a queue!")
-		text += fmt.Sprintf("%-10s\t:\t%s\n", "help", "prints this help menu!")
+	if RemovePrefix(ctx.Common.Content) == "help" {
+		text := "```\n"
+		text += fmt.Sprintf("%-5s\t:\t%s\n", "ping", "responds with pong!")
+		text += fmt.Sprintf("%-5s\t:\t%s\n", "help", "prints this help menu!")
+		text += "```"
 
-		s.ChannelMessageSend(m.ChannelID, "```"+text+"```")
-		fmt.Printf("%-10s\n", m.Content)
-		print.ColorPrint(34, 0, text)
+		resp, _ := ctx.Session.MessageCreate(&khl.MessageCreate{
+			MessageCreateBase: khl.MessageCreateBase{
+				Type:     khl.MessageTypeKMarkdown,
+				TargetID: ctx.Common.TargetID,
+				Content:  text,
+			},
+		})
+		// bot take over group auto delete message!
+		if BotTakeOverGroup(ctx.Extra.ChannelName) {
+			go func() {
+				time.Sleep(15 * time.Second)
+				ctx.Session.MessageDelete(resp.MsgID)
+			}()
+		}
 	}
 }
