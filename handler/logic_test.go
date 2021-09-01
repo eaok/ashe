@@ -1,10 +1,17 @@
 package handler
 
 import (
+	"os"
 	"testing"
 
-	"github.com/eaok/khlashe/config"
+	"github.com/eaok/ashe/config"
 )
+
+func TestMain(m *testing.M) {
+	config.ReadConfig("../config/config.ini")
+	exitCode := m.Run()
+	os.Exit(exitCode)
+}
 
 func TestEmojiHexToDec(t *testing.T) {
 	type args struct {
@@ -19,23 +26,23 @@ func TestEmojiHexToDec(t *testing.T) {
 		{
 			name: "9",
 			args: args{
-				config.EmojiNine,
+				config.Data.EmojiNine,
 			},
 			wantStr: "[#57;][#65039;][#8419;]",
 		},
 		{
 			name: "10",
 			args: args{
-				config.EmojiTen,
+				config.Data.EmojiTen,
 			},
 			wantStr: "[#128287;]",
 		},
 		{
 			name: "✅",
 			args: args{
-				config.EmojiCheckMark,
+				config.Data.EmojiCheckMark,
 			},
-			wantStr: "[#128287;]",
+			wantStr: "[#9989;]",
 		},
 	}
 	for _, tt := range tests {

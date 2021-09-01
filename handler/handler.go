@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/eaok/khlashe/config"
+	"github.com/eaok/ashe/config"
 	"github.com/lonelyevil/khl"
 	"github.com/phuslu/log"
 )
 
 func AddReaction(ctx *khl.ReactionAddContext) {
-	fmt.Println("go Reaction add!")
+	fmt.Println(ctx.Extra.Emoji.Name, "AddReaction", ctx.Extra.ChannelID)
 
 	// 根据userID获取username
 	uv, err := ctx.Session.UserView(ctx.Extra.UserID, ctx.Common.TargetID)
@@ -23,28 +23,26 @@ func AddReaction(ctx *khl.ReactionAddContext) {
 	}
 
 	// 角色选择频道
-	if ctx.Extra.ChannelID == config.IDChannelSelectRole {
+	if ctx.Extra.ChannelID == config.Data.IDChannelSelectRole {
 		if err := AddRoles(ctx); err != nil {
 			log.Error().Err(err).Msg("AddReaction")
 			return
 		}
 	}
 
-	fmt.Println(ctx.Extra.Emoji.Name, "AddReaction")
-
 	// 这3个emoji的动作传到team gorouting
 	switch ctx.Extra.Emoji.Name {
-	case config.EmojiCheckMark:
+	case config.Data.EmojiCheckMark:
 		fallthrough
-	case config.EmojiCrossMark:
+	case config.Data.EmojiCrossMark:
 		fallthrough
-	case EmojiHexToDec(config.EmojiStopSign):
+	case EmojiHexToDec(config.Data.EmojiStopSign):
 		team.ReactionAdd <- ctx
 	}
 }
 
 func DeleteReaction(ctx *khl.ReactionDeleteContext) {
-	fmt.Println("go Reaction delete!")
+	fmt.Println(ctx.Extra.Emoji.Name, "DeleteReaction")
 
 	// 根据userID获取username
 	uv, err := ctx.Session.UserView(ctx.Extra.UserID, ctx.Common.TargetID)
@@ -57,7 +55,7 @@ func DeleteReaction(ctx *khl.ReactionDeleteContext) {
 	}
 
 	// 角色选择频道
-	if ctx.Extra.ChannelID == config.IDChannelSelectRole {
+	if ctx.Extra.ChannelID == config.Data.IDChannelSelectRole {
 		if err := DeleteRoles(ctx); err != nil {
 			log.Error().Err(err).Msg("DeleteReaction")
 			return
@@ -99,23 +97,54 @@ func Ping(ctx *khl.TextMessageContext) {
 	}
 }
 
+func teamGoroutin(session *khl.Session, channelID string, reset chan bool) {
+	chanDone := make(chan bool)
+
+	for {
+		go startChannelTeam(session, channelID, chanDone)
+
+		select {
+		case <-chanDone:
+			fmt.Printf("%s team has done!\n", config.RSEmoji[config.ChanRole[channelID]])
+		case <-reset:
+			fmt.Printf("%s reset\n", channelID)
+			return
+		}
+	}
+
+}
+
 func Team(ctx *khl.TextMessageContext) {
 	if RemovePrefix(ctx.Common.Content) == "team" {
+		reset := make(chan bool)
+
+		fmt.Printf("team.running=%v\n", team.running)
 		if team.running {
+			// team.Close <- true
+			team.running = false
 			return
 		}
 
-		// go startChannelTeam(config.IDChannelRS11, ctx)
-		// go startChannelTeam(config.IDChannelRS10, ctx)
-		// go startChannelTeam(config.IDChannelRS9, ctx)
-		// go startChannelTeam(config.IDChannelRS8, ctx)
+		go teamGoroutin(ctx.Session, config.Data.IDChannelRS11, reset)
+		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS10, reset)
+		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS9, reset)
+		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS8, reset)
+		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS7, reset)
+		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS6, reset)
+		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS5, reset)
+		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS4, reset)
+
+		// addreaction发送到指定goroutine
 		go func() {
 			for {
-				chanDone := make(chan bool)
-				go startChannelTeam(config.IDChannelRS7, ctx, chanDone)
-
-				if <-chanDone {
-					fmt.Printf("team has done!")
+				fmt.Printf("team.MapGoroutine %v\n", team.MapGoroutine)
+				select {
+				case reaction := <-team.ReactionAdd:
+					fmt.Printf("team.MapGoroutine[%v]%s\n", reaction.Extra.ChannelID, reaction.Extra.Emoji.ID)
+					team.MapGoroutine[reaction.Extra.ChannelID] <- reaction
+				case <-team.Close:
+					close(reset)
+					return
 				}
 			}
 		}()

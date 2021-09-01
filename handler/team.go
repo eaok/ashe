@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/eaok/khlashe/config"
+	"github.com/eaok/ashe/config"
 	"github.com/lonelyevil/khl"
 	"github.com/phuslu/log"
 )
@@ -15,99 +15,106 @@ import (
 type users struct {
 	name   string
 	nameID string
-	time   int64
+	time   time.Time
 }
-
-var (
-	text1 = "**红星车队当前人数 [%d/4]**\n"
-	text2 = "加入的成员：👇  |  🔴红星等级：@%s\n"
-	text3 = "%s"
-	text4 = "点击 ✅ 加入车队，点击 ❎ 离开车队，点击 🛑 直接发车！\n"
-	// text1 = "**RED STAR QUEUE [%d/4]**\n"
-	// text2 = "Members joined:👇  |  🔴RS level: @%s\n"
-	// text3 = "%s"
-	// text4 = "Use ✅ to join, ❎ to leave or 🛑 to start in %d.\n"
-	// text5 = "Bored while waiting? Type !guide to refresh your knowledge!\n"
-	Text = text1 + text2 + text3 + text4
-
-// TeamBeginChan = make(chan int, 1)
-)
 
 type TeamData struct {
 	sync.Mutex
 
-	ReactionAdd chan *khl.ReactionAddContext
-	TeamStart   chan bool
-	Close       chan bool
-	running     bool
+	ReactionAdd  chan *khl.ReactionAddContext
+	MapGoroutine map[string]chan *khl.ReactionAddContext
+	TeamStart    chan bool
+	Close        chan bool
+	running      bool
 }
 
+var (
+	text1 = "**红星车队当前人数 [%d/4]**\n"
+	text2 = "加入的成员：👇  |  🔴红星等级：(rol)%d(rol)\n"
+	text3 = "%s"
+	text4 = "点击 ✅ 加入车队，点击 ❎ 离开车队，点击 🛑 直接发车！\n"
+	Text  = text1 + text2 + text3 + text4
+)
+
 var team = &TeamData{
-	ReactionAdd: make(chan *khl.ReactionAddContext, 1),
-	TeamStart:   make(chan bool, 1),
-	Close:       make(chan bool),
-	running:     false,
+	ReactionAdd:  make(chan *khl.ReactionAddContext, 1),
+	MapGoroutine: make(map[string]chan *khl.ReactionAddContext),
+	TeamStart:    make(chan bool, 1),
+	Close:        make(chan bool),
+	running:      false,
 }
 
 // startChannelTeam rs gorouting
-func startChannelTeam(ChannelID string, ctx *khl.TextMessageContext, done chan bool) {
-	fmt.Println("startChannelTeam")
+func startChannelTeam(session *khl.Session, ChannelID string, done chan bool) {
+	fmt.Printf("startChannelTeam ChannelID=%s\n", ChannelID)
 	dict := map[string]users{}
 	chanRS := make(chan bool, 1)
 
 	team.running = true
 
+	// 填充频道和chan通道的map，实现往指定goroutine发送数据
+	reactionAdd := make(chan *khl.ReactionAddContext, 1)
+	team.MapGoroutine[ChannelID] = reactionAdd
+
 	// 发送初始消息
-	resp, err := sendFirstMessage(ctx.Session, ChannelID)
+	resp, err := sendFirstMessage(session, ChannelID)
 	if err != nil {
 		log.Error().Err(err).Msg("send first message failed! startChannelTeam")
 		return
 	}
 
 	for {
+		startTime := time.Now()
 		select {
-		case reaction := <-team.ReactionAdd:
+		case reaction := <-reactionAdd:
 			// 如果reactionz有效就进入队伍
 			if reaction.Extra.MsgID == resp.MsgID {
 				fmt.Println(reaction.Extra.Emoji.Name, "startChannelTeam")
 				switch reaction.Extra.Emoji.Name {
-				case config.EmojiCheckMark:
+				case config.Data.EmojiCheckMark:
 					teamIn(dict, resp.MsgID, reaction, chanRS)
-				case config.EmojiCrossMark:
+				case config.Data.EmojiCrossMark:
 					teamOut(dict, resp.MsgID, reaction)
-				case EmojiHexToDec(config.EmojiStopSign):
+				case EmojiHexToDec(config.Data.EmojiStopSign):
 					teamDone(dict, resp.MsgID, reaction, chanRS)
 				default:
 				}
+				fmt.Printf("dict %v", dict)
 			}
+		case <-time.After(time.Until(startTime.Add(time.Minute))):
+			// 每分钟刷新一下组队信息，主要是排队时间
+			if len(dict) > 0 {
+				names := teamGetSortNames(dict)
+
+				session.MessageUpdate(&khl.MessageUpdate{
+					MessageUpdateBase: khl.MessageUpdateBase{
+						MsgID:   resp.MsgID,
+						Content: fmt.Sprintf(Text, len(dict), config.ChanRole[ChannelID], names),
+					},
+				})
+			}
+
 		case <-chanRS:
 			done <- true
 			return
-
 		}
 	}
 }
 
 // send init message
 func sendFirstMessage(s *khl.Session, channelID string) (*khl.MessageResp, error) {
-	fmt.Println("sendFirstMessage")
-	c, err := s.ChannelView(channelID)
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := s.MessageCreate(&khl.MessageCreate{
 		MessageCreateBase: khl.MessageCreateBase{
 			Type:     khl.MessageTypeKMarkdown,
 			TargetID: channelID,
-			Content:  fmt.Sprintf(Text, 0, c.Name, ""),
+			Content:  fmt.Sprintf(Text, 0, config.ChanRole[channelID], ""),
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.MessageAddReaction(resp.MsgID, config.EmojiCheckMark)
+	err = s.MessageAddReaction(resp.MsgID, config.Data.EmojiCheckMark)
 
 	return resp, err
 }
@@ -153,58 +160,58 @@ func resetReaction(dict map[string]users, msgID string, ctx *khl.ReactionAddCont
 
 		switch len(dict) {
 		case 1:
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, ctx.Extra.UserID)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCheckMark)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCrossMark)
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, ctx.Extra.UserID)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCheckMark)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCrossMark)
 			showEmojis(ctx)
 
 		case 2:
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCrossMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, ctx.Extra.UserID)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCheckMark)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCrossMark)
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCrossMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, ctx.Extra.UserID)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCheckMark)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCrossMark)
 		case 3:
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCrossMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, ctx.Extra.UserID)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCheckMark)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCrossMark)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiStopSign)
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCrossMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, ctx.Extra.UserID)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCheckMark)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCrossMark)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiStopSign)
 		}
 	} else if flag == 2 {
 		switch len(dict) {
 		case 0:
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCrossMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCrossMark, ctx.Extra.UserID)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCheckMark)
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCrossMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCrossMark, ctx.Extra.UserID)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCheckMark)
 		case 1:
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCrossMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCrossMark, ctx.Extra.UserID)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCheckMark)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCrossMark)
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCrossMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCrossMark, ctx.Extra.UserID)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCheckMark)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCrossMark)
 		case 2:
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiStopSign, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCrossMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCrossMark, ctx.Extra.UserID)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCheckMark)
-			ctx.Session.MessageAddReaction(msgID, config.EmojiCrossMark)
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiStopSign, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCrossMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCrossMark, ctx.Extra.UserID)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCheckMark)
+			ctx.Session.MessageAddReaction(msgID, config.Data.EmojiCrossMark)
 		}
 	} else if flag == 3 {
 		switch len(dict) {
 		// one person used to test
 		case 1:
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiStopSign, ctx.Extra.UserID)
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiStopSign, ctx.Extra.UserID)
 		case 3:
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiCrossMark, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiStopSign, "")
-			ctx.Session.MessageDeleteReaction(msgID, config.EmojiStopSign, ctx.Extra.UserID)
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCrossMark, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiStopSign, "")
+			ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiStopSign, ctx.Extra.UserID)
 		}
 	}
 }
@@ -223,32 +230,43 @@ func sendTempMessage(s *khl.Session, channelID string, text string) {
 }
 
 func teamGetSortNames(dict map[string]users) string {
-	dictSort := make(map[int64]string)
+	dictTime := make(map[int64]users)
 	keys := []string{}
-	namesList := []string{}
+	namesList := []users{}
 
+	// 转换dict为time索引
 	for key, user := range dict {
-		dictSort[user.time] = key
+		dictTime[user.time.Unix()] = dict[key]
 	}
 
 	// 按时间排序取名字列表
-	for timeKey := range dictSort {
+	for timeKey := range dictTime {
 		keys = append(keys, strconv.FormatInt(timeKey, 10))
 	}
 	sort.Strings(keys)
 
 	for _, key := range keys {
-		i, err := strconv.ParseInt(key, 10, 64)
+		// string to int64
+		timeKeyInt, err := strconv.ParseInt(key, 10, 64)
 		if err == nil {
-			namesList = append(namesList, dict[dictSort[i]].name)
+			namesList = append(namesList, users{
+				name:   dictTime[timeKeyInt].name,
+				nameID: dictTime[timeKeyInt].nameID,
+				time:   dictTime[timeKeyInt].time,
+			})
 		}
 	}
 
 	names := ""
 	for i := 0; i < len(dict); i++ {
+		timeSub := time.Since(namesList[i].time)
+		value := fmt.Sprintf("%v", timeSub.Round(time.Second))
+
 		names += config.EmojiNum[i]
 		names += " "
-		names += namesList[i]
+		names += namesList[i].name
+		names += " "
+		names += value
 		names += "\n"
 	}
 
@@ -260,7 +278,7 @@ func teamIn(dict map[string]users, msgID string, ctx *khl.ReactionAddContext, cl
 	// Check user whether it is in team
 	if u, ok := dict[ctx.Extra.UserID]; ok {
 		sendTempMessage(ctx.Session, ctx.Extra.ChannelID, fmt.Sprintf("@%s You're already in the team!", u.name))
-		ctx.Session.MessageDeleteReaction(msgID, config.EmojiCheckMark, ctx.Extra.UserID)
+		ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCheckMark, ctx.Extra.UserID)
 		return nil
 	} else {
 		// 根据userID获取username
@@ -273,22 +291,18 @@ func teamIn(dict map[string]users, msgID string, ctx *khl.ReactionAddContext, cl
 		dict[ctx.Extra.UserID] = users{
 			name:   uv.Username,
 			nameID: ctx.Extra.UserID,
-			time:   time.Now().Unix(),
+			time:   time.Now(),
 		}
 
 		// update message
 		if len(dict) == 4 {
 			teamDone(dict, msgID, ctx, close)
 		} else {
-			c, err := ctx.Session.ChannelView(ctx.Extra.ChannelID)
-			if err != nil {
-				return err
-			}
 			names := teamGetSortNames(dict)
 			ctx.Session.MessageUpdate(&khl.MessageUpdate{
 				MessageUpdateBase: khl.MessageUpdateBase{
 					MsgID:   msgID,
-					Content: fmt.Sprintf(Text, len(dict), c.Name, names),
+					Content: fmt.Sprintf(Text, len(dict), config.ChanRole[ctx.Extra.ChannelID], names),
 				},
 			})
 			// reset reaction
@@ -304,22 +318,17 @@ func teamOut(dict map[string]users, msgID string, ctx *khl.ReactionAddContext) e
 	// Check user whether it is in team
 	if u, ok := dict[ctx.Extra.UserID]; !ok {
 		sendTempMessage(ctx.Session, ctx.Extra.ChannelID, fmt.Sprintf("@%s You're not in the team!", u.name))
-		ctx.Session.MessageDeleteReaction(msgID, config.EmojiCrossMark, ctx.Extra.UserID)
+		ctx.Session.MessageDeleteReaction(msgID, config.Data.EmojiCrossMark, ctx.Extra.UserID)
 		return nil
 	} else {
 		// leave the team
 		delete(dict, ctx.Extra.UserID)
 
-		// update message
-		c, err := ctx.Session.ChannelView(ctx.Extra.ChannelID)
-		if err != nil {
-			return err
-		}
 		names := teamGetSortNames(dict)
 		ctx.Session.MessageUpdate(&khl.MessageUpdate{
 			MessageUpdateBase: khl.MessageUpdateBase{
 				MsgID:   msgID,
-				Content: fmt.Sprintf(Text, len(dict), c.Name, names),
+				Content: fmt.Sprintf(Text, len(dict), config.ChanRole[ctx.Extra.ChannelID], names),
 			},
 		})
 
@@ -332,24 +341,26 @@ func teamOut(dict map[string]users, msgID string, ctx *khl.ReactionAddContext) e
 
 func teamDone(dict map[string]users, msgID string, ctx *khl.ReactionAddContext, close chan bool) error {
 	fmt.Println("teamDone")
-	c, err := ctx.Session.ChannelView(ctx.Extra.ChannelID)
-	if err != nil {
-		return err
-	}
 	names := teamGetSortNames(dict)
 	ctx.Session.MessageUpdate(&khl.MessageUpdate{
 		MessageUpdateBase: khl.MessageUpdateBase{
 			MsgID:   msgID,
-			Content: fmt.Sprintf(Text, len(dict), c.Name, names),
+			Content: fmt.Sprintf(Text, len(dict), config.ChanRole[ctx.Extra.ChannelID], names),
 		},
 	})
 	resetReaction(dict, msgID, ctx, 3)
 
+	ment := ""
+	for key := range dict {
+		ment += "(met)"
+		ment += dict[key].nameID
+		ment += "(met)"
+	}
 	ctx.Session.MessageCreate(&khl.MessageCreate{
 		MessageCreateBase: khl.MessageCreateBase{
 			Type:     khl.MessageTypeKMarkdown,
 			TargetID: ctx.Extra.ChannelID,
-			Content:  fmt.Sprintf("车队已经出发啦。。。 %s\n---\n", "hello"),
+			Content:  fmt.Sprintf("%s车队已经出发啦。。。 \n---\n", ment),
 		},
 	})
 

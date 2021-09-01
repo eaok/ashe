@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/eaok/khlashe/config"
-	"github.com/eaok/khlashe/router"
+	"github.com/eaok/ashe/config"
+	"github.com/eaok/ashe/router"
 	"github.com/lonelyevil/khl"
 	"github.com/lonelyevil/khl/log_adapter/plog"
 	"github.com/phuslu/log"
@@ -15,7 +15,7 @@ import (
 
 func init() {
 	// Read config from configuration
-	config.ReadConfig()
+	config.ReadConfig("./config/config.ini")
 }
 
 func main() {

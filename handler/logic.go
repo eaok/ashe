@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/eaok/khlashe/config"
+	"github.com/eaok/ashe/config"
 )
 
 // add order prefix
@@ -19,23 +19,23 @@ func RemovePrefix(content string) string {
 // bot takes over the group
 func BotTakeOverGroup(ChannelName string) bool {
 	switch ChannelName {
-	case config.NameChannelSelectRole:
+	case config.Data.NameChannelSelectRole:
 		fallthrough
-	case config.NameChannelRS11:
+	case config.Data.NameChannelRS11:
 		fallthrough
-	case config.NameChannelRS10:
+	case config.Data.NameChannelRS10:
 		fallthrough
-	case config.NameChannelRS9:
+	case config.Data.NameChannelRS9:
 		fallthrough
-	case config.NameChannelRS8:
+	case config.Data.NameChannelRS8:
 		fallthrough
-	case config.NameChannelRS7:
+	case config.Data.NameChannelRS7:
 		fallthrough
-	case config.NameChannelRS6:
+	case config.Data.NameChannelRS6:
 		fallthrough
-	case config.NameChannelRS5:
+	case config.Data.NameChannelRS5:
 		fallthrough
-	case config.NameChannelRS4:
+	case config.Data.NameChannelRS4:
 		return true
 	default:
 		return false

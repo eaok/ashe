@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/eaok/khlashe/config"
-	"github.com/eaok/khlashe/handler"
+	"github.com/eaok/ashe/config"
+	"github.com/eaok/ashe/handler"
 	"github.com/lonelyevil/khl"
 )
 
 func InitAction(s *khl.Session) {
 	// 获取指定频道消息列表
-	_, err := s.MessageList(config.IDChannelSelectRole)
+	_, err := s.MessageList(config.Data.IDChannelSelectRole)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -22,7 +22,7 @@ func InitAction(s *khl.Session) {
 	// resp, _ := s.MessageCreate(&khl.MessageCreate{
 	// 	MessageCreateBase: khl.MessageCreateBase{
 	// 		TargetID: handler.IDChannelSelectRole,
-	// 		Content:  handler.EmojiTest,
+	// 		Content:  handler."EmojiTest",
 	// 	},
 	// })
 	// go func() {
@@ -33,7 +33,7 @@ func InitAction(s *khl.Session) {
 	resp, _ := s.MessageCreate(&khl.MessageCreate{
 		MessageCreateBase: khl.MessageCreateBase{
 			Type:     khl.MessageTypeKMarkdown,
-			TargetID: config.IDChannelSelectRole,
+			TargetID: config.Data.IDChannelSelectRole,
 			Content: `**选择红星车队等级**
 			---
 			根据自己红星等级，自助选择要参与红星车队的等级角色！
