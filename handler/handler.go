@@ -2,12 +2,19 @@ package handler
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/eaok/ashe/config"
 	"github.com/lonelyevil/khl"
 	"github.com/phuslu/log"
 )
+
+func CardButton(ctx *khl.MessageButtonClickContext) {
+	fmt.Printf("value=%s msgID=%s userID=%s\n", ctx.Extra.Value, ctx.Extra.MsgID, ctx.Extra.UserID)
+
+	team.ReactionAdd <- ctx
+}
 
 func AddReaction(ctx *khl.ReactionAddContext) {
 	fmt.Println(ctx.Extra.Emoji.Name, "AddReaction", ctx.Extra.ChannelID)
@@ -28,16 +35,6 @@ func AddReaction(ctx *khl.ReactionAddContext) {
 			log.Error().Err(err).Msg("AddReaction")
 			return
 		}
-	}
-
-	// 这3个emoji的动作传到team gorouting
-	switch ctx.Extra.Emoji.Name {
-	case config.Data.EmojiCheckMark:
-		fallthrough
-	case config.Data.EmojiCrossMark:
-		fallthrough
-	case EmojiHexToDec(config.Data.EmojiStopSign):
-		team.ReactionAdd <- ctx
 	}
 }
 
@@ -78,7 +75,6 @@ func Ping(ctx *khl.TextMessageContext) {
 	if ctx.Common.Type != khl.MessageTypeText || ctx.Extra.Author.Bot {
 		return
 	}
-	// if strings.Contains(ctx.Common.Content, "ping") {
 	if RemovePrefix(ctx.Common.Content) == "ping" {
 		resp, _ := ctx.Session.MessageCreate(&khl.MessageCreate{
 			MessageCreateBase: khl.MessageCreateBase{
@@ -98,20 +94,14 @@ func Ping(ctx *khl.TextMessageContext) {
 }
 
 func teamGoroutin(session *khl.Session, channelID string, reset chan bool) {
-	chanDone := make(chan bool)
+	wait := sync.WaitGroup{}
 
 	for {
-		go startChannelTeam(session, channelID, chanDone)
-
-		select {
-		case <-chanDone:
-			fmt.Printf("%s team has done!\n", config.RSEmoji[config.ChanRole[channelID]])
-		case <-reset:
-			fmt.Printf("%s reset\n", channelID)
-			return
-		}
+		wait.Add(1)
+		go startChannelTeam(session, channelID, &wait)
+		wait.Wait()
+		fmt.Printf("%s team has done!\n", config.RSEmoji[config.ChanRole[channelID]])
 	}
-
 }
 
 func Team(ctx *khl.TextMessageContext) {
@@ -126,22 +116,22 @@ func Team(ctx *khl.TextMessageContext) {
 		}
 
 		go teamGoroutin(ctx.Session, config.Data.IDChannelRS11, reset)
-		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS10, reset)
-		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS9, reset)
-		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS8, reset)
-		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS7, reset)
-		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS6, reset)
-		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS5, reset)
-		// go teamGoroutin(ctx.Session, config.Data.IDChannelRS4, reset)
+		go teamGoroutin(ctx.Session, config.Data.IDChannelRS10, reset)
+		go teamGoroutin(ctx.Session, config.Data.IDChannelRS9, reset)
+		go teamGoroutin(ctx.Session, config.Data.IDChannelRS8, reset)
+		go teamGoroutin(ctx.Session, config.Data.IDChannelRS7, reset)
+		go teamGoroutin(ctx.Session, config.Data.IDChannelRS6, reset)
+		go teamGoroutin(ctx.Session, config.Data.IDChannelRS5, reset)
+		go teamGoroutin(ctx.Session, config.Data.IDChannelRS4, reset)
 
 		// addreaction发送到指定goroutine
 		go func() {
 			for {
 				fmt.Printf("team.MapGoroutine %v\n", team.MapGoroutine)
 				select {
-				case reaction := <-team.ReactionAdd:
-					fmt.Printf("team.MapGoroutine[%v]%s\n", reaction.Extra.ChannelID, reaction.Extra.Emoji.ID)
-					team.MapGoroutine[reaction.Extra.ChannelID] <- reaction
+				case button := <-team.ReactionAdd:
+					fmt.Printf("team.MapGoroutine[%v]%s\n", button.Extra.TargetID, button.Extra.Value)
+					team.MapGoroutine[button.Extra.TargetID] <- button
 				case <-team.Close:
 					close(reset)
 					return
