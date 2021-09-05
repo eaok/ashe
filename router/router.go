@@ -134,11 +134,15 @@ func InitAction(s *khl.Session) {
 }
 
 func Route(s *khl.Session) {
-	s.AddHandler(handler.AutoDelete)
+	if config.Data.RunMod == "debug" {
+		s.AddHandler(handler.AutoDelete)
+	}
 	s.AddHandler(handler.Ping)
 	s.AddHandler(handler.CardButton)
 	s.AddHandler(handler.AddReaction)
 	s.AddHandler(handler.DeleteReaction)
+	s.AddHandler(handler.InTeam)
+	s.AddHandler(handler.OutTeam)
 	s.AddHandler(handler.Team)
 	s.AddHandler(handler.Help)
 }

@@ -10,6 +10,7 @@ import (
 type ConfigData struct {
 	Prefix string
 	Token  string
+	RunMod string
 
 	EmojiPointDown string
 	EmojiRedCircle string
@@ -91,7 +92,6 @@ func ReadConfig(path string) error {
 	checkError(err)
 
 	appMod := conf.Section("").Key("app_mode").String()
-
 	Data.Token = conf.Section(appMod).Key("Token").String()
 	Data.IDChannelSelectRole = conf.Section(appMod).Key("IDChannelSelectRole").String()
 	Data.IDChannelRS11 = conf.Section(appMod).Key("IDChannelRS11").String()
@@ -153,12 +153,13 @@ func ReadConfig(path string) error {
 	token, err := base64.StdEncoding.DecodeString(Data.Token)
 	checkError(err)
 	Data.Token = string(token)
+	Data.RunMod = appMod
 
-	// Data.Token = "1/MTA0NzY=/XLUOtvHDdNSlFZG7D9OJ+A=="
+	Data.Token = "1/MTA0NzY=/XLUOtvHDdNSlFZG7D9OJ+A=="
 
-	fmt.Println("Got appMod:  " + appMod)
 	fmt.Println("Got Token:  " + Data.Token)
 	fmt.Println("Got Prefix: " + Data.Prefix)
+	fmt.Println("Got appMod:  " + Data.RunMod)
 
 	// 给全局变量赋值
 	EmojiNum[0] = Data.EmojiOne

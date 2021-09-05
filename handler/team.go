@@ -4,206 +4,138 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/eaok/ashe/config"
 	"github.com/lonelyevil/khl"
-	"github.com/phuslu/log"
 )
 
 type users struct {
 	name   string
 	nameID string
 	time   time.Time
+	count  int
 }
 
 type TeamData struct {
 	sync.Mutex
 
-	ReactionAdd  chan *khl.MessageButtonClickContext
-	MapGoroutine map[string]chan *khl.MessageButtonClickContext
-	TeamStart    chan bool
-	Close        chan bool
-	running      bool
+	OrderIn         chan *khl.TextMessageContext
+	OrderOut        chan *khl.TextMessageContext
+	MapInGoroutine  map[string]chan *khl.TextMessageContext
+	MapOutGoroutine map[string]chan *khl.TextMessageContext
+	TeamStart       chan bool
+	Close           chan bool
+	running         bool
 }
 
-var Text = `[
-	{
-	  "type": "card",
-	  "size": "lg",
-	  "theme": "warning",
-	  "modules": [
-		{
-		  "type": "header",
-		  "text": {
-			"type": "plain-text",
-			"content": "红星车队%s"
-		  }
-		},
-		{
-		  "type": "divider"
-		},
-		{
-		  "type": "section",
-		  "text": {
-			"type": "kmarkdown",
-			"content": "%s"
-		  }
-		},
-		{
-		  "type": "action-group",
-		  "elements": [
-			{
-			  "type": "button",
-			  "theme": "primary",
-			  "value": "ok",
-			  "click": "return-val",
-			  "text": {
+var Text = `[{
+	"type": "card",
+	"size": "lg",
+	"theme": "primary",
+	"modules": [{
+			"type": "header",
+			"text": {
 				"type": "plain-text",
-				"content": "加入"
-			  }
-			},
-			{
-			  "type": "button",
-			  "theme": "danger",
-			  "value": "cancel",
-			  "click": "return-val",
-			  "text": {
-				"type": "plain-text",
-				"content": "离开"
-			  }
-			},
-			{
-			  "type": "button",
-			  "theme": "primary",
-			  "value": "begin",
-			  "click": "return-val",
-			  "text": {
-				"type": "plain-text",
-				"content": "开始"
-			  }
+				"content": "红星车队%s"
 			}
-		  ]
+		},
+		{
+			"type": "divider"
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "kmarkdown",
+				"content": "%s"
+			}
 		}
-	  ]
-	}
-  ]`
+	]
+}]`
 
 // var (
-// 	text1 = "**红星车队当前人数 [%d/4]**\n"
-// 	text2 = "加入的成员：👇  |  🔴红星等级：(rol)%d(rol)\n"
-// 	text3 = "%s"
-// 	text4 = "点击 ✅ 加入车队，点击 ❎ 离开车队，点击 🛑 直接发车！\n"
-// 	Text  = text1 + text2 + text3 + text4
+// 	text1 = "**红星车队%s**\n"
+// 	text2 = "%s"
+// 	Text  = text1 + text2
 // )
 
 var team = &TeamData{
-	ReactionAdd:  make(chan *khl.MessageButtonClickContext, 1),
-	MapGoroutine: make(map[string]chan *khl.MessageButtonClickContext),
-	TeamStart:    make(chan bool, 1),
-	Close:        make(chan bool),
-	running:      false,
+	OrderIn:         make(chan *khl.TextMessageContext, 1),
+	OrderOut:        make(chan *khl.TextMessageContext, 1),
+	MapInGoroutine:  make(map[string]chan *khl.TextMessageContext),
+	MapOutGoroutine: make(map[string]chan *khl.TextMessageContext),
+	TeamStart:       make(chan bool, 1),
+	Close:           make(chan bool),
+	running:         false,
+}
+
+func TeamGoroutin(session *khl.Session, channelID string, reset chan bool) {
+	for {
+		chanDone := make(chan bool)
+		go TeamStartChannel(session, channelID, chanDone)
+		switch {
+		case <-chanDone:
+			fmt.Printf("%s team has done!\n", config.RSEmoji[config.ChanRole[channelID]])
+		case <-reset:
+			fmt.Println("TeamGoroutin reset")
+			return
+		}
+	}
 }
 
 // startChannelTeam rs gorouting
-func startChannelTeam(session *khl.Session, ChannelID string, wait *sync.WaitGroup) {
+func TeamStartChannel(session *khl.Session, ChannelID string, chanDone chan bool) {
 	fmt.Printf("startChannelTeam ChannelID=%s\n", ChannelID)
 	dict := map[string]users{}
 	chanRS := make(chan bool, 1)
 
 	team.running = true
 
-	buttonChan := make(chan *khl.MessageButtonClickContext, 1)
+	teamIn := make(chan *khl.TextMessageContext, 1)
+	teamOut := make(chan *khl.TextMessageContext, 1)
 
 	// 填充频道和chan通道的map，实现往指定goroutine发送数据
 	// 并发访问map不安全，会出现fatal error: concurrent map writes
 	session.RWMutex.Lock()
-	team.MapGoroutine[ChannelID] = buttonChan
+	team.MapInGoroutine[ChannelID] = teamIn
+	team.MapOutGoroutine[ChannelID] = teamOut
 	session.RWMutex.Unlock()
 
 	// 发送初始消息
-	resp, err := sendFirstMessage(session, ChannelID)
-	if err != nil {
-		log.Error().Err(err).Msg("send first message failed! startChannelTeam")
-		return
-	}
-
-	// channelID获取channelName guildID
-	ch, _ := session.ChannelView(ChannelID)
+	// TeamSendTempMessage(session, ChannelID, "team start......")
 
 	for {
-		startTime := time.Now()
 		select {
-		case button := <-buttonChan:
-			if button.Extra.MsgID == resp.MsgID {
-				switch button.Extra.Value {
-				case "ok":
-					teamIn(dict, resp.MsgID, button, chanRS)
-				case "cancel":
-					teamOut(dict, resp.MsgID, button)
-				case "begin":
-					teamDone(dict, resp.MsgID, button, chanRS)
-				default:
-				}
-				fmt.Printf("dict %v", dict)
-			}
-		case <-time.After(time.Until(startTime.Add(time.Minute))):
-			// 每分钟刷新一下组队信息，主要是排队时间
-			if len(dict) > 0 {
-				names := teamGetSortNames(dict)
-
-				session.MessageUpdate(&khl.MessageUpdate{
-					MessageUpdateBase: khl.MessageUpdateBase{
-						MsgID:   resp.MsgID,
-						Content: fmt.Sprintf(Text, ch.Name, names),
-					},
-				})
-			}
-
+		case in := <-teamIn:
+			TeamIn(dict, in, chanRS)
+			fmt.Printf("dict %v\n", dict)
+		case out := <-teamOut:
+			TeamOut(dict, out)
+			fmt.Printf("dict %v\n", dict)
 		case <-chanRS:
-			wait.Done()
+			chanDone <- true
 			return
 		}
 	}
 }
 
-// send init message
-func sendFirstMessage(s *khl.Session, channelID string) (*khl.MessageResp, error) {
-	// channelID获取channelName
-	ch, err := s.ChannelView(channelID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := s.MessageCreate(&khl.MessageCreate{
-		MessageCreateBase: khl.MessageCreateBase{
-			Type:     khl.MessageTypeCard,
-			TargetID: channelID,
-			Content:  fmt.Sprintf(Text, ch.Name, ""),
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, err
-}
-
-func sendTempMessage(s *khl.Session, channelID string, text string) {
+func TeamSendTempMessage(s *khl.Session, channelID string, text string) {
 	msg, _ := s.MessageCreate(&khl.MessageCreate{
 		MessageCreateBase: khl.MessageCreateBase{
+			Type:     khl.MessageTypeKMarkdown,
 			TargetID: channelID,
 			Content:  text,
 		},
 	})
 	go func() {
-		time.Sleep(2 * time.Second)
+		time.Sleep(30 * time.Second)
 		s.MessageDelete(msg.MsgID)
 	}()
 }
 
-func teamGetSortNames(dict map[string]users) string {
+func TeamGetSortNames(dict map[string]users) string {
 	dictTime := make(map[int64]users)
 	keys := []string{}
 	namesList := []users{}
@@ -227,88 +159,127 @@ func teamGetSortNames(dict map[string]users) string {
 				name:   dictTime[timeKeyInt].name,
 				nameID: dictTime[timeKeyInt].nameID,
 				time:   dictTime[timeKeyInt].time,
+				count:  dictTime[timeKeyInt].count,
 			})
 		}
 	}
 
 	names := ""
+	EmojiIndex := 0
 	for i := 0; i < len(dict); i++ {
-		timeSub := time.Since(namesList[i].time)
-		value := fmt.Sprintf("%v", timeSub.Round(time.Second))
-
-		// if i != 0 {
-		// 	names += "\n"
-		// }
-		names += fmt.Sprintf("%s %s %10s\\n", config.EmojiNum[i], namesList[i].name, value)
+		// timeSub := time.Since(namesList[i].time)
+		// value := fmt.Sprintf("%v", timeSub.Round(time.Second))
+		// value := fmt.Sprintf("%v", namesList[i].time.Round(time.Second))
+		value := namesList[i].time.Format("15 : 04")
+		for j := 0; j < namesList[i].count; j++ {
+			names += fmt.Sprintf("%s %s %15s\\n", config.EmojiNum[EmojiIndex], namesList[i].name, value)
+			EmojiIndex++
+		}
 	}
+	fmt.Println("names", names, "TeamGetSortNames")
 
 	return names
 }
 
-func teamIn(dict map[string]users, msgID string, ctx *khl.MessageButtonClickContext, close chan bool) error {
-	fmt.Println("teamIn")
-	// channelID获取channelName guildID
-	ch, err := ctx.Session.ChannelView(ctx.Extra.TargetID)
-	if err != nil {
-		return err
+// 组队人数是否已满
+func TeamMember(dict map[string]users) int {
+	teamMember := 0
+	for key := range dict {
+		teamMember += dict[key].count
 	}
+
+	return teamMember
+}
+
+func TeamIn(dict map[string]users, ctx *khl.TextMessageContext, close chan bool) error {
+	fmt.Println("teamIn", ctx.Common.Content)
+
+	// 处理指令参数
+	var count int
+	if len(RemovePrefix(ctx.Common.Content)) > 2 {
+		content := strings.Fields(RemovePrefix(ctx.Common.Content))
+		count, _ = strconv.Atoi(content[1])
+		if count < 1 || count > 4 {
+			TeamSendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
+			return nil
+		}
+	} else if len(RemovePrefix(ctx.Common.Content)) == 2 {
+		count = 1
+	}
+
 	// Check user whether it is in team
-	if u, ok := dict[ctx.Extra.UserID]; ok {
-		sendTempMessage(ctx.Session, ctx.Extra.TargetID, fmt.Sprintf("@%s You're already in the team!", u.name))
+	if u, ok := dict[ctx.Extra.Author.ID]; ok {
+		TeamSendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 你已经在队伍中！", u.nameID))
 		return nil
 	} else {
-		// 根据userID获取username
-		uv, err := ctx.Session.UserView(ctx.Extra.UserID, ch.GuildID)
+		// 判断count和已有人数是否超额
+		if TeamMember(dict)+count > 4 {
+			TeamSendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 人数已经超过4人！", u.nameID))
+			return nil
+		}
+
+		// join the team
+		dict[ctx.Extra.Author.ID] = users{
+			name:   ctx.Extra.Author.Username,
+			nameID: ctx.Extra.Author.ID,
+			time:   time.Now(),
+			count:  count,
+		}
+
+		// channelID获取channelName guildID
+		ch, err := ctx.Session.ChannelView(ctx.Common.TargetID)
 		if err != nil {
 			return err
 		}
 
-		// join the team
-		dict[ctx.Extra.UserID] = users{
-			name:   uv.Username,
-			nameID: ctx.Extra.UserID,
-			time:   time.Now(),
-		}
+		// send new message
+		names := TeamGetSortNames(dict)
+		ctx.Session.MessageCreate(&khl.MessageCreate{
+			MessageCreateBase: khl.MessageCreateBase{
+				Type:     khl.MessageTypeCard,
+				TargetID: ctx.Common.TargetID,
+				Content:  fmt.Sprintf(Text, ch.Name, names),
+			},
+		})
 
-		// update message
-		if len(dict) == 4 {
-			teamDone(dict, msgID, ctx, close)
-		} else {
-			names := teamGetSortNames(dict)
-			fmt.Println(names)
-			ctx.Session.MessageUpdate(&khl.MessageUpdate{
-				MessageUpdateBase: khl.MessageUpdateBase{
-					MsgID:   msgID,
-					Content: fmt.Sprintf(Text, ch.Name, names),
-				},
-			})
+		if TeamMember(dict) == 4 {
+			teamDone(dict, ctx, close)
 		}
 	}
 
 	return nil
 }
 
-func teamOut(dict map[string]users, msgID string, ctx *khl.MessageButtonClickContext) error {
-	fmt.Println("teamOut")
+func TeamOut(dict map[string]users, ctx *khl.TextMessageContext) error {
+	fmt.Println("teamOut", ctx.Common.Content)
+
+	// 处理指令参数 out 没有参数
+	if len(RemovePrefix(ctx.Common.Content)) > 3 {
+		TeamSendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
+		return nil
+	}
+
 	// Check user whether it is in team
-	if u, ok := dict[ctx.Extra.UserID]; !ok {
-		sendTempMessage(ctx.Session, ctx.Extra.TargetID, fmt.Sprintf("@%s You're not in the team!", u.name))
+	if _, ok := dict[ctx.Extra.Author.ID]; !ok {
+		TeamSendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 你没有再队伍中！", ctx.Extra.Author.ID))
 		return nil
 	} else {
 		// leave the team
-		delete(dict, ctx.Extra.UserID)
+		delete(dict, ctx.Extra.Author.ID)
 
 		// channelID获取channelName guildID
-		ch, err := ctx.Session.ChannelView(ctx.Extra.TargetID)
+		ch, err := ctx.Session.ChannelView(ctx.Common.TargetID)
 		if err != nil {
 			return err
 		}
 
-		names := teamGetSortNames(dict)
-		ctx.Session.MessageUpdate(&khl.MessageUpdate{
-			MessageUpdateBase: khl.MessageUpdateBase{
-				MsgID:   msgID,
-				Content: fmt.Sprintf(Text, ch.Name, names),
+		// send new message
+		names := TeamGetSortNames(dict)
+		ctx.Session.MessageCreate(&khl.MessageCreate{
+			MessageCreateBase: khl.MessageCreateBase{
+				Type:     khl.MessageTypeCard,
+				TargetID: ctx.Common.TargetID,
+				Content:  fmt.Sprintf(Text, ch.Name, names),
 			},
 		})
 	}
@@ -316,22 +287,8 @@ func teamOut(dict map[string]users, msgID string, ctx *khl.MessageButtonClickCon
 	return nil
 }
 
-func teamDone(dict map[string]users, msgID string, ctx *khl.MessageButtonClickContext, close chan bool) error {
+func teamDone(dict map[string]users, ctx *khl.TextMessageContext, close chan bool) error {
 	fmt.Println("teamDone")
-
-	// channelID获取channelName guildID
-	ch, err := ctx.Session.ChannelView(ctx.Extra.TargetID)
-	if err != nil {
-		return err
-	}
-
-	names := teamGetSortNames(dict)
-	ctx.Session.MessageUpdate(&khl.MessageUpdate{
-		MessageUpdateBase: khl.MessageUpdateBase{
-			MsgID:   msgID,
-			Content: fmt.Sprintf(Text, ch.Name, names),
-		},
-	})
 
 	ment := ""
 	for key := range dict {
@@ -342,7 +299,7 @@ func teamDone(dict map[string]users, msgID string, ctx *khl.MessageButtonClickCo
 	ctx.Session.MessageCreate(&khl.MessageCreate{
 		MessageCreateBase: khl.MessageCreateBase{
 			Type:     khl.MessageTypeKMarkdown,
-			TargetID: ch.ID,
+			TargetID: ctx.Common.TargetID,
 			Content:  fmt.Sprintf("%s车队已经出发啦。。。 \n---\n", ment),
 		},
 	})

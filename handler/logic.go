@@ -11,9 +11,11 @@ import (
 func RemovePrefix(content string) string {
 	if config.Data.Prefix != "" && strings.HasPrefix(content, config.Data.Prefix) {
 		return strings.TrimPrefix(content, config.Data.Prefix)
+	} else if config.Data.Prefix != "" {
+		return "nonono"
 	}
 
-	return ""
+	return content
 }
 
 // bot takes over the group

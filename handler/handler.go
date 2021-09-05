@@ -2,7 +2,7 @@ package handler
 
 import (
 	"fmt"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/eaok/ashe/config"
@@ -13,14 +13,14 @@ import (
 func CardButton(ctx *khl.MessageButtonClickContext) {
 	fmt.Printf("value=%s msgID=%s userID=%s\n", ctx.Extra.Value, ctx.Extra.MsgID, ctx.Extra.UserID)
 
-	team.ReactionAdd <- ctx
+	// team.ReactionAdd <- ctx
 }
 
 func AddReaction(ctx *khl.ReactionAddContext) {
 	fmt.Println(ctx.Extra.Emoji.Name, "AddReaction", ctx.Extra.ChannelID)
 
 	// 根据userID获取username
-	uv, err := ctx.Session.UserView(ctx.Extra.UserID, ctx.Common.TargetID)
+	uv, err := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
 	if err != nil {
 		log.Error().Err(err).Msg("AddReaction")
 	}
@@ -42,7 +42,7 @@ func DeleteReaction(ctx *khl.ReactionDeleteContext) {
 	fmt.Println(ctx.Extra.Emoji.Name, "DeleteReaction")
 
 	// 根据userID获取username
-	uv, err := ctx.Session.UserView(ctx.Extra.UserID, ctx.Common.TargetID)
+	uv, err := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
 	if err != nil {
 		log.Error().Err(err).Msg("DeleteReaction")
 	}
@@ -93,47 +93,50 @@ func Ping(ctx *khl.TextMessageContext) {
 	}
 }
 
-func teamGoroutin(session *khl.Session, channelID string, reset chan bool) {
-	wait := sync.WaitGroup{}
+func InTeam(ctx *khl.TextMessageContext) {
+	if strings.HasPrefix(RemovePrefix(ctx.Common.Content), "in") {
+		team.OrderIn <- ctx
+	}
+}
 
-	for {
-		wait.Add(1)
-		go startChannelTeam(session, channelID, &wait)
-		wait.Wait()
-		fmt.Printf("%s team has done!\n", config.RSEmoji[config.ChanRole[channelID]])
+func OutTeam(ctx *khl.TextMessageContext) {
+	if RemovePrefix(ctx.Common.Content) == "out" {
+		team.OrderOut <- ctx
 	}
 }
 
 func Team(ctx *khl.TextMessageContext) {
 	if RemovePrefix(ctx.Common.Content) == "team" {
-		reset := make(chan bool)
 
 		fmt.Printf("team.running=%v\n", team.running)
 		if team.running {
-			// team.Close <- true
+			team.Close <- true
 			team.running = false
-			return
 		}
 
-		go teamGoroutin(ctx.Session, config.Data.IDChannelRS11, reset)
-		go teamGoroutin(ctx.Session, config.Data.IDChannelRS10, reset)
-		go teamGoroutin(ctx.Session, config.Data.IDChannelRS9, reset)
-		go teamGoroutin(ctx.Session, config.Data.IDChannelRS8, reset)
-		go teamGoroutin(ctx.Session, config.Data.IDChannelRS7, reset)
-		go teamGoroutin(ctx.Session, config.Data.IDChannelRS6, reset)
-		go teamGoroutin(ctx.Session, config.Data.IDChannelRS5, reset)
-		go teamGoroutin(ctx.Session, config.Data.IDChannelRS4, reset)
+		reset := make(chan bool)
+		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS11, reset)
+		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS10, reset)
+		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS9, reset)
+		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS8, reset)
+		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS7, reset)
+		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS6, reset)
+		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS5, reset)
+		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS4, reset)
 
-		// addreaction发送到指定goroutine
+		// in out 发送到指定goroutine
 		go func() {
 			for {
-				fmt.Printf("team.MapGoroutine %v\n", team.MapGoroutine)
+				fmt.Printf("team.MapInGoroutine %v\n", team.MapInGoroutine)
+				fmt.Printf("team.MapOutGoroutine %v\n", team.MapOutGoroutine)
 				select {
-				case button := <-team.ReactionAdd:
-					fmt.Printf("team.MapGoroutine[%v]%s\n", button.Extra.TargetID, button.Extra.Value)
-					team.MapGoroutine[button.Extra.TargetID] <- button
+				case in := <-team.OrderIn:
+					team.MapInGoroutine[in.Common.TargetID] <- in
+				case out := <-team.OrderOut:
+					team.MapOutGoroutine[out.Common.TargetID] <- out
 				case <-team.Close:
 					close(reset)
+					fmt.Println("reset Team")
 					return
 				}
 			}
@@ -148,9 +151,15 @@ func Help(ctx *khl.TextMessageContext) {
 	}
 
 	if RemovePrefix(ctx.Common.Content) == "help" {
-		text := "```\n"
-		text += fmt.Sprintf("%-5s\t:\t%s\n", "ping", "responds with pong!")
-		text += fmt.Sprintf("%-5s\t:\t%s\n", "help", "prints this help menu!")
+		text := "> `"
+		text += fmt.Sprintf("所有指令前缀为：%s", config.Data.Prefix)
+		text += "`\n"
+		text += "```\n"
+		text += fmt.Sprintf("%-7s:    %s\n", "ping", "回复消息：pong!")
+		text += fmt.Sprintf("%-7s:    %s\n", "team", "开启或重启所有频道车队组队")
+		text += fmt.Sprintf("%-7s:    %s\n", "in", "加入车队中，可跟数字[1-3]")
+		text += fmt.Sprintf("%-7s:    %s\n", "out", "离开车队")
+		text += fmt.Sprintf("%-7s:    %s\n", "help", "查看指令帮助菜单")
 		text += "```"
 
 		resp, _ := ctx.Session.MessageCreate(&khl.MessageCreate{
@@ -160,8 +169,9 @@ func Help(ctx *khl.TextMessageContext) {
 				Content:  text,
 			},
 		})
+
 		// bot take over group auto delete message!
-		if BotTakeOverGroup(ctx.Extra.ChannelName) {
+		if BotTakeOverGroup(ctx.Extra.ChannelName) && config.Data.RunMod == "debug" {
 			go func() {
 				time.Sleep(15 * time.Second)
 				ctx.Session.MessageDelete(resp.MsgID)

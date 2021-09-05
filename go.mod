@@ -10,3 +10,6 @@ require (
 	github.com/smartystreets/goconvey v1.6.4 // indirect
 	gopkg.in/ini.v1 v1.62.0 // indirect
 )
+
+replace github.com/lonelyevil/khl => ../khl
+replace github.com/lonelyevil/khl/log_adapter/plog => ../khl/log_adapter/plog

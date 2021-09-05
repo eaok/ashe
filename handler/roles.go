@@ -17,7 +17,7 @@ func AddRole(roleID int64, roleName string, ctx *khl.ReactionAddContext) error {
 	if ctx.Extra.MsgID == config.Data.IDMsgRS {
 		if ctx.Extra.Emoji.Name == config.RSEmoji[roleID] ||
 			ctx.Extra.Emoji.Name == EmojiHexToDec(config.RSEmoji[roleID]) {
-			user, _ := ctx.Session.UserView(ctx.Extra.UserID, ctx.Common.TargetID)
+			user, _ := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
 			fmt.Println(user.Roles)
 			for _, role := range user.Roles {
 				if int64(role) == roleID {
@@ -72,7 +72,7 @@ func DeleteRole(roleID int64, roleName string, ctx *khl.ReactionDeleteContext) e
 	if ctx.Extra.MsgID == config.Data.IDMsgRS {
 		if ctx.Extra.Emoji.Name == config.RSEmoji[roleID] ||
 			ctx.Extra.Emoji.Name == EmojiHexToDec(config.RSEmoji[roleID]) {
-			user, _ := ctx.Session.UserView(ctx.Extra.UserID, ctx.Common.TargetID)
+			user, _ := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
 			fmt.Println(user.Roles)
 			for _, role := range user.Roles {
 				if int64(role) == roleID {

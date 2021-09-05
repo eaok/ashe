@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,6 +21,10 @@ func init() {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:8080", nil)
+	}()
+
 	s := khl.New(config.Data.Token, plog.NewLogger(&log.Logger{
 		Level: log.ErrorLevel,
 		Writer: &log.ConsoleWriter{
