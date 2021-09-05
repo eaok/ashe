@@ -105,45 +105,6 @@ func OutTeam(ctx *khl.TextMessageContext) {
 	}
 }
 
-func Team(ctx *khl.TextMessageContext) {
-	if RemovePrefix(ctx.Common.Content) == "team" {
-
-		fmt.Printf("team.running=%v\n", team.running)
-		if team.running {
-			team.Close <- true
-			team.running = false
-		}
-
-		reset := make(chan bool)
-		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS11, reset)
-		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS10, reset)
-		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS9, reset)
-		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS8, reset)
-		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS7, reset)
-		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS6, reset)
-		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS5, reset)
-		go TeamGoroutin(ctx.Session, config.Data.IDChannelRS4, reset)
-
-		// in out 发送到指定goroutine
-		go func() {
-			for {
-				fmt.Printf("team.MapInGoroutine %v\n", team.MapInGoroutine)
-				fmt.Printf("team.MapOutGoroutine %v\n", team.MapOutGoroutine)
-				select {
-				case in := <-team.OrderIn:
-					team.MapInGoroutine[in.Common.TargetID] <- in
-				case out := <-team.OrderOut:
-					team.MapOutGoroutine[out.Common.TargetID] <- out
-				case <-team.Close:
-					close(reset)
-					fmt.Println("reset Team")
-					return
-				}
-			}
-		}()
-	}
-}
-
 func Help(ctx *khl.TextMessageContext) {
 	// Ignore all messages created by the bot itself
 	if ctx.Extra.Author.Bot {
@@ -156,7 +117,6 @@ func Help(ctx *khl.TextMessageContext) {
 		text += "`\n"
 		text += "```\n"
 		text += fmt.Sprintf("%-7s:    %s\n", "ping", "回复消息：pong!")
-		text += fmt.Sprintf("%-7s:    %s\n", "team", "开启或重启所有频道车队组队")
 		text += fmt.Sprintf("%-7s:    %s\n", "in", "加入车队中，可跟数字[1-3]")
 		text += fmt.Sprintf("%-7s:    %s\n", "out", "离开车队")
 		text += fmt.Sprintf("%-7s:    %s\n", "help", "查看指令帮助菜单")

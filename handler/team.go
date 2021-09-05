@@ -21,14 +21,10 @@ type users struct {
 
 type TeamData struct {
 	sync.Mutex
-
 	OrderIn         chan *khl.TextMessageContext
 	OrderOut        chan *khl.TextMessageContext
 	MapInGoroutine  map[string]chan *khl.TextMessageContext
 	MapOutGoroutine map[string]chan *khl.TextMessageContext
-	TeamStart       chan bool
-	Close           chan bool
-	running         bool
 }
 
 var Text = `[{
@@ -55,53 +51,63 @@ var Text = `[{
 	]
 }]`
 
-// var (
-// 	text1 = "**红星车队%s**\n"
-// 	text2 = "%s"
-// 	Text  = text1 + text2
-// )
-
 var team = &TeamData{
 	OrderIn:         make(chan *khl.TextMessageContext, 1),
 	OrderOut:        make(chan *khl.TextMessageContext, 1),
 	MapInGoroutine:  make(map[string]chan *khl.TextMessageContext),
 	MapOutGoroutine: make(map[string]chan *khl.TextMessageContext),
-	TeamStart:       make(chan bool, 1),
-	Close:           make(chan bool),
-	running:         false,
 }
 
-func TeamGoroutin(session *khl.Session, channelID string, reset chan bool) {
-	for {
-		chanDone := make(chan bool)
-		go TeamStartChannel(session, channelID, chanDone)
-		switch {
-		case <-chanDone:
-			fmt.Printf("%s team has done!\n", config.RSEmoji[config.ChanRole[channelID]])
-		case <-reset:
-			fmt.Println("TeamGoroutin reset")
-			return
+func TeamStart(s *khl.Session) {
+	go TeamGoroutin(s, config.Data.IDChannelRS11)
+	go TeamGoroutin(s, config.Data.IDChannelRS10)
+	go TeamGoroutin(s, config.Data.IDChannelRS9)
+	go TeamGoroutin(s, config.Data.IDChannelRS8)
+	go TeamGoroutin(s, config.Data.IDChannelRS7)
+	go TeamGoroutin(s, config.Data.IDChannelRS6)
+	go TeamGoroutin(s, config.Data.IDChannelRS5)
+	go TeamGoroutin(s, config.Data.IDChannelRS4)
+
+	// in out 发送到指定goroutine
+	go func() {
+		for {
+			// fmt.Printf("team.MapInGoroutine %v\n", team.MapInGoroutine)
+			// fmt.Printf("team.MapOutGoroutine %v\n", team.MapOutGoroutine)
+			select {
+			case in := <-team.OrderIn:
+				team.MapInGoroutine[in.Common.TargetID] <- in
+			case out := <-team.OrderOut:
+				team.MapOutGoroutine[out.Common.TargetID] <- out
+			}
 		}
+	}()
+}
+
+func TeamGoroutin(session *khl.Session, channelID string) {
+	wait := sync.WaitGroup{}
+	for {
+		wait.Add(1)
+		go TeamStartChannel(session, channelID, &wait)
+		wait.Wait()
+		fmt.Printf("%s team has done!\n", config.RSEmoji[config.ChanRole[channelID]])
 	}
 }
 
 // startChannelTeam rs gorouting
-func TeamStartChannel(session *khl.Session, ChannelID string, chanDone chan bool) {
+func TeamStartChannel(session *khl.Session, ChannelID string, wait *sync.WaitGroup) {
 	fmt.Printf("startChannelTeam ChannelID=%s\n", ChannelID)
 	dict := map[string]users{}
 	chanRS := make(chan bool, 1)
-
-	team.running = true
 
 	teamIn := make(chan *khl.TextMessageContext, 1)
 	teamOut := make(chan *khl.TextMessageContext, 1)
 
 	// 填充频道和chan通道的map，实现往指定goroutine发送数据
 	// 并发访问map不安全，会出现fatal error: concurrent map writes
-	session.RWMutex.Lock()
+	team.Mutex.Lock()
 	team.MapInGoroutine[ChannelID] = teamIn
 	team.MapOutGoroutine[ChannelID] = teamOut
-	session.RWMutex.Unlock()
+	team.Mutex.Unlock()
 
 	// 发送初始消息
 	// TeamSendTempMessage(session, ChannelID, "team start......")
@@ -115,7 +121,7 @@ func TeamStartChannel(session *khl.Session, ChannelID string, chanDone chan bool
 			TeamOut(dict, out)
 			fmt.Printf("dict %v\n", dict)
 		case <-chanRS:
-			chanDone <- true
+			wait.Done()
 			return
 		}
 	}

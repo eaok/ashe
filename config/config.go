@@ -155,7 +155,8 @@ func ReadConfig(path string) error {
 	Data.Token = string(token)
 	Data.RunMod = appMod
 
-	Data.Token = "1/MTA0NzY=/XLUOtvHDdNSlFZG7D9OJ+A=="
+	// test
+	// Data.Token = "1/MTA0NzY=/XLUOtvHDdNSlFZG7D9OJ+A=="
 
 	fmt.Println("Got Token:  " + Data.Token)
 	fmt.Println("Got Prefix: " + Data.Prefix)

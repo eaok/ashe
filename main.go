@@ -22,7 +22,11 @@ func init() {
 
 func main() {
 	go func() {
-		http.ListenAndServe("localhost:8080", nil)
+		if config.Data.RunMod == "debug" {
+			http.ListenAndServe(":8081", nil)
+		} else {
+			http.ListenAndServe(":8080", nil)
+		}
 	}()
 
 	s := khl.New(config.Data.Token, plog.NewLogger(&log.Logger{
@@ -34,7 +38,7 @@ func main() {
 		},
 	}))
 
-	// router.InitAction(s)
+	router.InitAction(s)
 	router.Route(s)
 
 	// need to open the socket
