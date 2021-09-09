@@ -3,169 +3,107 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/eaok/ashe/config"
 	"github.com/lonelyevil/khl"
 	"github.com/phuslu/log"
 )
 
-func AddRole(roleID int64, roleName string, ctx *khl.ReactionAddContext) error {
+func AddRole(roleID int64, roleName string, ctx *khl.ReactionAddContext) {
 	iFlagRoleExist := false
 
-	log.Info().Str("MsgID", ctx.Extra.MsgID).Str("UserID", ctx.Extra.UserID).Str("TargetID", ctx.Common.TargetID).Str("EmojiName", ctx.Extra.Emoji.Name).Msg("AddRole")
-	if ctx.Extra.MsgID == config.Data.IDMsgRS {
-		if ctx.Extra.Emoji.Name == config.RSEmoji[roleID] ||
-			ctx.Extra.Emoji.Name == EmojiHexToDec(config.RSEmoji[roleID]) {
-			user, _ := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
-			fmt.Println(user.Roles)
-			for _, role := range user.Roles {
-				if int64(role) == roleID {
-					iFlagRoleExist = true
-				}
-			}
-			if !iFlagRoleExist {
-				_, err := ctx.Session.GuildRoleGrant(ctx.Common.TargetID, ctx.Extra.UserID, roleID)
-				if err != nil {
-					log.Error().Err(errors.New("an error")).Msg("Role grant failed!")
-					return err
-				}
-
-				resp, err := ctx.Session.MessageCreate(&khl.MessageCreate{
-					MessageCreateBase: khl.MessageCreateBase{
-						TargetID: ctx.Extra.ChannelID,
-						Content:  fmt.Sprintf("You successfully joined %s!", roleName),
-					},
-				})
-				if err != nil {
-					return err
-				}
-				go func() {
-					time.Sleep(2 * time.Second)
-					ctx.Session.MessageDelete(resp.MsgID)
-				}()
-				// log.Info().Msgf("%s successfully joined %s!", user.Username, roleName)
-			} else {
-				resp, err := ctx.Session.MessageCreate(&khl.MessageCreate{
-					MessageCreateBase: khl.MessageCreateBase{
-						TargetID: ctx.Extra.ChannelID,
-						Content:  fmt.Sprintf("You're already group %s!", roleName),
-					},
-				})
-				if err != nil {
-					return err
-				}
-				go func() {
-					time.Sleep(2 * time.Second)
-					ctx.Session.MessageDelete(resp.MsgID)
-				}()
+	if ctx.Extra.Emoji.Name == config.RSEmoji[roleID] ||
+		ctx.Extra.Emoji.Name == EmojiHexToDec(config.RSEmoji[roleID]) {
+		user, _ := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
+		for _, role := range user.Roles {
+			if int64(role) == roleID {
+				iFlagRoleExist = true
 			}
 		}
-	}
+		fmt.Println(user.Roles, iFlagRoleExist)
 
-	return nil
+		if !iFlagRoleExist {
+			_, err := ctx.Session.GuildRoleGrant(ctx.Common.TargetID, ctx.Extra.UserID, roleID)
+			if err != nil {
+				log.Error().Err(errors.New("an error")).Msg("Role grant failed!")
+				return
+			}
+
+			SendDirectMessage(ctx.Session, ctx.Extra.UserID, fmt.Sprintf("You successfully joined %s!", roleName))
+		} else {
+			SendDirectMessage(ctx.Session, ctx.Extra.UserID, fmt.Sprintf("You're already group %s!", roleName))
+		}
+	}
 }
 
-func DeleteRole(roleID int64, roleName string, ctx *khl.ReactionDeleteContext) error {
+func DeleteRole(roleID int64, roleName string, ctx *khl.ReactionDeleteContext) {
 	iFlagRoleExist := false
 
-	if ctx.Extra.MsgID == config.Data.IDMsgRS {
-		if ctx.Extra.Emoji.Name == config.RSEmoji[roleID] ||
-			ctx.Extra.Emoji.Name == EmojiHexToDec(config.RSEmoji[roleID]) {
-			user, _ := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
-			fmt.Println(user.Roles)
-			for _, role := range user.Roles {
-				if int64(role) == roleID {
-					iFlagRoleExist = true
-				}
-			}
-
-			if iFlagRoleExist {
-				_, err := ctx.Session.GuildRoleRevoke(ctx.Common.TargetID, ctx.Extra.UserID, roleID)
-				if err != nil {
-					return err
-				}
-
-				resp, err := ctx.Session.MessageCreate(&khl.MessageCreate{
-					MessageCreateBase: khl.MessageCreateBase{
-						TargetID: ctx.Extra.ChannelID,
-						Content:  fmt.Sprintf("You successfully left group %s!", roleName),
-					},
-				})
-				if err != nil {
-					return err
-				}
-				go func() {
-					time.Sleep(2 * time.Second)
-					ctx.Session.MessageDelete(resp.MsgID)
-				}()
-
-				log.Info().Msgf("%s successfully left group %s!", user.Username, roleName)
-			} else {
-				resp, err := ctx.Session.MessageCreate(&khl.MessageCreate{
-					MessageCreateBase: khl.MessageCreateBase{
-						TargetID: ctx.Extra.ChannelID,
-						Content:  fmt.Sprintf("You not in group %s!", roleName),
-					},
-				})
-				if err != nil {
-					return err
-				}
-				go func() {
-					time.Sleep(2 * time.Second)
-					ctx.Session.MessageDelete(resp.MsgID)
-				}()
+	if ctx.Extra.Emoji.Name == config.RSEmoji[roleID] ||
+		ctx.Extra.Emoji.Name == EmojiHexToDec(config.RSEmoji[roleID]) {
+		user, _ := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
+		for _, role := range user.Roles {
+			if int64(role) == roleID {
+				iFlagRoleExist = true
 			}
 		}
-	}
+		fmt.Println(user.Roles, iFlagRoleExist)
 
-	return nil
+		if iFlagRoleExist {
+			_, err := ctx.Session.GuildRoleRevoke(ctx.Common.TargetID, ctx.Extra.UserID, roleID)
+			if err != nil {
+				log.Error().Err(errors.New("an error")).Msg("Role revoke failed!")
+				return
+			}
+
+			SendDirectMessage(ctx.Session, ctx.Extra.UserID, fmt.Sprintf("You successfully left group %s!", roleName))
+		} else {
+			SendDirectMessage(ctx.Session, ctx.Extra.UserID, fmt.Sprintf("You not in group %s!", roleName))
+		}
+	}
 }
 
 func AddRoles(ctx *khl.ReactionAddContext) error {
 	if ctx.Extra.MsgID == config.Data.IDMsgRS {
 		log.Info().Str("EmojiName", ctx.Extra.Emoji.Name).Str("DecEmojiTem", EmojiHexToDec(config.Data.EmojiTen)).Msg("AddRoles")
+
 		switch ctx.Extra.Emoji.Name {
 		case EmojiHexToDec(config.Data.EmojiEleven):
-			if err := AddRole(config.Data.RoleRS11, "RS11", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("add role failed!")
-				return err
-			}
+			AddRole(config.Data.RoleRS11, "RS11", ctx)
 		case EmojiHexToDec(config.Data.EmojiTen):
-			if err := AddRole(config.Data.RoleRS10, "RS10", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("add role failed!")
-				return err
-			}
+			AddRole(config.Data.RoleRS10, "RS10", ctx)
 		case config.Data.EmojiNine:
-			if err := AddRole(config.Data.RoleRS9, "RS9", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("add role failed!")
-				return err
-			}
+			AddRole(config.Data.RoleRS9, "RS9", ctx)
 		case config.Data.EmojiNeight:
-			if err := AddRole(config.Data.RoleRS8, "RS8", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("add role failed!")
-				return err
-			}
+			AddRole(config.Data.RoleRS8, "RS8", ctx)
 		case config.Data.EmojiSeven:
-			if err := AddRole(config.Data.RoleRS7, "RS7", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("add role failed!")
-				return err
-			}
+			AddRole(config.Data.RoleRS7, "RS7", ctx)
 		case config.Data.EmojiSix:
-			if err := AddRole(config.Data.RoleRS6, "RS6", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("add role failed!")
-				return err
-			}
+			AddRole(config.Data.RoleRS6, "RS6", ctx)
 		case config.Data.EmojiFive:
-			if err := AddRole(config.Data.RoleRS5, "RS5", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("add role failed!")
-				return err
-			}
+			AddRole(config.Data.RoleRS5, "RS5", ctx)
 		case config.Data.EmojiFour:
-			if err := AddRole(config.Data.RoleRS4, "RS4", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("add role failed!")
-				return err
-			}
+			AddRole(config.Data.RoleRS4, "RS4", ctx)
+		default:
+		}
+	} else if ctx.Extra.MsgID == config.Data.IDMsgBS {
+		switch ctx.Extra.Emoji.Name {
+		case config.Data.EmojiNeight:
+			AddRole(config.Data.RoleBS8, "BS8", ctx)
+		case config.Data.EmojiSeven:
+			AddRole(config.Data.RoleBS7, "BS7", ctx)
+		case config.Data.EmojiSix:
+			AddRole(config.Data.RoleBS6, "BS6", ctx)
+		case config.Data.EmojiFive:
+			AddRole(config.Data.RoleBS5, "BS5", ctx)
+		case config.Data.EmojiFour:
+			AddRole(config.Data.RoleBS4, "BS4", ctx)
+		case config.Data.EmojiThree:
+			AddRole(config.Data.RoleBS3, "BS3", ctx)
+		case config.Data.EmojiTwo:
+			AddRole(config.Data.RoleBS2, "BS2", ctx)
+		case config.Data.EmojiOne:
+			AddRole(config.Data.RoleBS1, "BS1", ctx)
 		default:
 		}
 	}
@@ -175,49 +113,45 @@ func AddRoles(ctx *khl.ReactionAddContext) error {
 
 func DeleteRoles(ctx *khl.ReactionDeleteContext) error {
 	if ctx.Extra.MsgID == config.Data.IDMsgRS {
-		log.Info().Str("EmojiName", ctx.Extra.Emoji.Name).Msg("AddRoles")
+		log.Info().Str("EmojiName", ctx.Extra.Emoji.Name).Str("DecEmojiTem", EmojiHexToDec(config.Data.EmojiTen)).Msg("DeleteRoles")
 
 		switch ctx.Extra.Emoji.Name {
 		case EmojiHexToDec(config.Data.EmojiEleven):
-			if err := DeleteRole(config.Data.RoleRS11, "RS11", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("delete role failed!")
-				return err
-			}
+			DeleteRole(config.Data.RoleRS11, "RS11", ctx)
 		case EmojiHexToDec(config.Data.EmojiTen):
-			if err := DeleteRole(config.Data.RoleRS10, "RS10", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("delete role failed!")
-				return err
-			}
+			DeleteRole(config.Data.RoleRS10, "RS10", ctx)
 		case config.Data.EmojiNine:
-			if err := DeleteRole(config.Data.RoleRS9, "RS9", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("delete role failed!")
-				return err
-			}
+			DeleteRole(config.Data.RoleRS9, "RS9", ctx)
 		case config.Data.EmojiNeight:
-			if err := DeleteRole(config.Data.RoleRS8, "RS8", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("delete role failed!")
-				return err
-			}
+			DeleteRole(config.Data.RoleRS8, "RS8", ctx)
 		case config.Data.EmojiSeven:
-			if err := DeleteRole(config.Data.RoleRS7, "RS7", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("delete role failed!")
-				return err
-			}
+			DeleteRole(config.Data.RoleRS7, "RS7", ctx)
 		case config.Data.EmojiSix:
-			if err := DeleteRole(config.Data.RoleRS6, "RS6", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("delete role failed!")
-				return err
-			}
+			DeleteRole(config.Data.RoleRS6, "RS6", ctx)
 		case config.Data.EmojiFive:
-			if err := DeleteRole(config.Data.RoleRS5, "RS5", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("delete role failed!")
-				return err
-			}
+			DeleteRole(config.Data.RoleRS5, "RS5", ctx)
 		case config.Data.EmojiFour:
-			if err := DeleteRole(config.Data.RoleRS4, "RS4", ctx); err != nil {
-				log.Error().Err(errors.New("an error")).Msg("delete role failed!")
-				return err
-			}
+			DeleteRole(config.Data.RoleRS4, "RS4", ctx)
+		default:
+		}
+	} else if ctx.Extra.MsgID == config.Data.IDMsgBS {
+		switch ctx.Extra.Emoji.Name {
+		case config.Data.EmojiNeight:
+			DeleteRole(config.Data.RoleBS8, "BS8", ctx)
+		case config.Data.EmojiSeven:
+			DeleteRole(config.Data.RoleBS7, "BS7", ctx)
+		case config.Data.EmojiSix:
+			DeleteRole(config.Data.RoleBS6, "BS6", ctx)
+		case config.Data.EmojiFive:
+			DeleteRole(config.Data.RoleBS5, "BS5", ctx)
+		case config.Data.EmojiFour:
+			DeleteRole(config.Data.RoleBS4, "BS4", ctx)
+		case config.Data.EmojiThree:
+			DeleteRole(config.Data.RoleBS3, "BS3", ctx)
+		case config.Data.EmojiTwo:
+			DeleteRole(config.Data.RoleBS2, "BS2", ctx)
+		case config.Data.EmojiOne:
+			DeleteRole(config.Data.RoleBS1, "BS1", ctx)
 		default:
 		}
 	}

@@ -71,8 +71,6 @@ func TeamStart(s *khl.Session) {
 	// in out 发送到指定goroutine
 	go func() {
 		for {
-			// fmt.Printf("team.MapInGoroutine %v\n", team.MapInGoroutine)
-			// fmt.Printf("team.MapOutGoroutine %v\n", team.MapOutGoroutine)
 			select {
 			case in := <-team.OrderIn:
 				team.MapInGoroutine[in.Common.TargetID] <- in
@@ -95,7 +93,6 @@ func TeamGoroutin(session *khl.Session, channelID string) {
 
 // startChannelTeam rs gorouting
 func TeamStartChannel(session *khl.Session, ChannelID string, wait *sync.WaitGroup) {
-	fmt.Printf("startChannelTeam ChannelID=%s\n", ChannelID)
 	dict := map[string]users{}
 	chanRS := make(chan bool, 1)
 
@@ -108,9 +105,6 @@ func TeamStartChannel(session *khl.Session, ChannelID string, wait *sync.WaitGro
 	team.MapInGoroutine[ChannelID] = teamIn
 	team.MapOutGoroutine[ChannelID] = teamOut
 	team.Mutex.Unlock()
-
-	// 发送初始消息
-	// TeamSendTempMessage(session, ChannelID, "team start......")
 
 	for {
 		select {
@@ -125,20 +119,6 @@ func TeamStartChannel(session *khl.Session, ChannelID string, wait *sync.WaitGro
 			return
 		}
 	}
-}
-
-func TeamSendTempMessage(s *khl.Session, channelID string, text string) {
-	msg, _ := s.MessageCreate(&khl.MessageCreate{
-		MessageCreateBase: khl.MessageCreateBase{
-			Type:     khl.MessageTypeKMarkdown,
-			TargetID: channelID,
-			Content:  text,
-		},
-	})
-	go func() {
-		time.Sleep(30 * time.Second)
-		s.MessageDelete(msg.MsgID)
-	}()
 }
 
 func TeamGetSortNames(dict map[string]users) string {
@@ -173,9 +153,6 @@ func TeamGetSortNames(dict map[string]users) string {
 	names := ""
 	EmojiIndex := 0
 	for i := 0; i < len(dict); i++ {
-		// timeSub := time.Since(namesList[i].time)
-		// value := fmt.Sprintf("%v", timeSub.Round(time.Second))
-		// value := fmt.Sprintf("%v", namesList[i].time.Round(time.Second))
 		value := namesList[i].time.Format("15 : 04")
 		for j := 0; j < namesList[i].count; j++ {
 			names += fmt.Sprintf("%s %s %15s\\n", config.EmojiNum[EmojiIndex], namesList[i].name, value)
@@ -206,7 +183,7 @@ func TeamIn(dict map[string]users, ctx *khl.TextMessageContext, close chan bool)
 		content := strings.Fields(RemovePrefix(ctx.Common.Content))
 		count, _ = strconv.Atoi(content[1])
 		if count < 1 || count > 4 {
-			TeamSendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
+			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
 			return nil
 		}
 	} else if len(RemovePrefix(ctx.Common.Content)) == 2 {
@@ -215,12 +192,12 @@ func TeamIn(dict map[string]users, ctx *khl.TextMessageContext, close chan bool)
 
 	// Check user whether it is in team
 	if u, ok := dict[ctx.Extra.Author.ID]; ok {
-		TeamSendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 你已经在队伍中！", u.nameID))
+		SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 你已经在队伍中！", u.nameID))
 		return nil
 	} else {
 		// 判断count和已有人数是否超额
 		if TeamMember(dict)+count > 4 {
-			TeamSendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 人数已经超过4人！", u.nameID))
+			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 人数已经超过4人！", u.nameID))
 			return nil
 		}
 
@@ -261,13 +238,13 @@ func TeamOut(dict map[string]users, ctx *khl.TextMessageContext) error {
 
 	// 处理指令参数 out 没有参数
 	if len(RemovePrefix(ctx.Common.Content)) > 3 {
-		TeamSendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
+		SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
 		return nil
 	}
 
 	// Check user whether it is in team
 	if _, ok := dict[ctx.Extra.Author.ID]; !ok {
-		TeamSendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 你没有再队伍中！", ctx.Extra.Author.ID))
+		SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 你没有在队伍中！", ctx.Extra.Author.ID))
 		return nil
 	} else {
 		// leave the team

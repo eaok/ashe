@@ -3,8 +3,10 @@ package handler
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/eaok/ashe/config"
+	"github.com/lonelyevil/khl"
 )
 
 // add order prefix
@@ -20,9 +22,25 @@ func RemovePrefix(content string) string {
 
 // bot takes over the group
 func BotTakeOverGroup(ChannelName string) bool {
+	if BotTakeOverRSGroup(ChannelName) || BotTakeOverRoleSelectGroup(ChannelName) ||
+		BotTakeOverBSGroup(ChannelName) {
+		return true
+	} else {
+		return false
+	}
+}
+
+func BotTakeOverRoleSelectGroup(ChannelName string) bool {
 	switch ChannelName {
 	case config.Data.NameChannelSelectRole:
-		fallthrough
+		return true
+	default:
+		return false
+	}
+}
+
+func BotTakeOverRSGroup(ChannelName string) bool {
+	switch ChannelName {
 	case config.Data.NameChannelRS11:
 		fallthrough
 	case config.Data.NameChannelRS10:
@@ -42,6 +60,41 @@ func BotTakeOverGroup(ChannelName string) bool {
 	default:
 		return false
 	}
+}
+
+func BotTakeOverBSGroup(ChannelName string) bool {
+	switch ChannelName {
+	case config.Data.NameChannelBS:
+		return true
+	default:
+		return false
+	}
+}
+
+// 发送临时消息
+func SendTempMessage(s *khl.Session, channelID string, text string) {
+	msg, _ := s.MessageCreate(&khl.MessageCreate{
+		MessageCreateBase: khl.MessageCreateBase{
+			Type:     khl.MessageTypeKMarkdown,
+			TargetID: channelID,
+			Content:  text,
+		},
+	})
+	go func() {
+		time.Sleep(30 * time.Second)
+		s.MessageDelete(msg.MsgID)
+	}()
+}
+
+// 发送私人消息
+func SendDirectMessage(s *khl.Session, targetID string, text string) {
+	s.DirectMessageCreate(&khl.DirectMessageCreate{
+		MessageCreateBase: khl.MessageCreateBase{
+			Type:     khl.MessageTypeKMarkdown,
+			TargetID: targetID,
+			Content:  text,
+		},
+	})
 }
 
 // emoji编码转10进制格式

@@ -35,6 +35,10 @@ func AddReaction(ctx *khl.ReactionAddContext) {
 			log.Error().Err(err).Msg("AddReaction")
 			return
 		}
+	} else if ctx.Extra.ChannelID == config.Data.IDChannelBS {
+		if ctx.Extra.Emoji.ID == config.Data.EmojiCheckMark {
+			BSteam.ReactionAdd <- ctx
+		}
 	}
 }
 
@@ -57,13 +61,17 @@ func DeleteReaction(ctx *khl.ReactionDeleteContext) {
 			log.Error().Err(err).Msg("DeleteReaction")
 			return
 		}
+	} else if ctx.Extra.ChannelID == config.Data.IDChannelBS {
+		if ctx.Extra.Emoji.ID == config.Data.EmojiCheckMark {
+			BSteam.ReactionDelete <- ctx
+		}
 	}
 }
 
 // auto delete messages
 func AutoDelete(ctx *khl.TextMessageContext) {
 	// non bot messages are automatically deleted
-	if ok := BotTakeOverGroup(ctx.Extra.ChannelName); !ctx.Extra.Author.Bot && ok {
+	if !ctx.Extra.Author.Bot && BotTakeOverGroup(ctx.Extra.ChannelName) {
 		go func() {
 			time.Sleep(15 * time.Second)
 			ctx.Session.MessageDelete(ctx.Common.MsgID)
@@ -95,13 +103,31 @@ func Ping(ctx *khl.TextMessageContext) {
 
 func InTeam(ctx *khl.TextMessageContext) {
 	if strings.HasPrefix(RemovePrefix(ctx.Common.Content), "in") {
-		team.OrderIn <- ctx
+		if BotTakeOverRSGroup(ctx.Extra.ChannelName) {
+			team.OrderIn <- ctx
+		} else {
+			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 红星频道专属指令，请在红星频道输入！", ctx.Extra.Author.ID))
+		}
 	}
 }
 
 func OutTeam(ctx *khl.TextMessageContext) {
 	if RemovePrefix(ctx.Common.Content) == "out" {
-		team.OrderOut <- ctx
+		if BotTakeOverRSGroup(ctx.Extra.ChannelName) {
+			team.OrderOut <- ctx
+		} else {
+			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 红星频道专属指令，请在红星频道输入！", ctx.Extra.Author.ID))
+		}
+	}
+}
+
+func Blue(ctx *khl.TextMessageContext) {
+	if RemovePrefix(ctx.Common.Content) == "bb" {
+		if BotTakeOverBSGroup(ctx.Extra.ChannelName) {
+			BSTeam(ctx)
+		} else {
+			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 蓝星频道专属指令，请在蓝星频道输入！", ctx.Extra.Author.ID))
+		}
 	}
 }
 
@@ -119,6 +145,7 @@ func Help(ctx *khl.TextMessageContext) {
 		text += fmt.Sprintf("%-7s:    %s\n", "ping", "回复消息：pong!")
 		text += fmt.Sprintf("%-7s:    %s\n", "in", "加入车队中，可跟数字[1-3]")
 		text += fmt.Sprintf("%-7s:    %s\n", "out", "离开车队")
+		text += fmt.Sprintf("%-7s:    %s\n", "bb", "创建一个10分钟的蓝星呼叫僚机队列")
 		text += fmt.Sprintf("%-7s:    %s\n", "help", "查看指令帮助菜单")
 		text += "```"
 

@@ -49,12 +49,12 @@ type ConfigData struct {
 	NameChannelRS5        string
 	NameChannelRS4        string
 
-	IDChannelBL6 string
-	IDChannelBL5 string
-	IDChannelBL4 string
+	IDChannelBS      string
+	NameChannelBS    string
+	IDChannelGroupBS string
 
 	IDMsgRS string
-	IDMxdBL string
+	IDMsgBS string
 
 	RoleRS11 int64
 	RoleRS10 int64
@@ -65,13 +65,19 @@ type ConfigData struct {
 	RoleRS5  int64
 	RoleRS4  int64
 
-	RoleBL6 int64
-	RoleBL5 int64
-	RoleBL4 int64
+	RoleBS8 int64
+	RoleBS7 int64
+	RoleBS6 int64
+	RoleBS5 int64
+	RoleBS4 int64
+	RoleBS3 int64
+	RoleBS2 int64
+	RoleBS1 int64
 }
 
 var Data = ConfigData{}
 var EmojiNum = [4]string{}
+var BSRoleNum = [8]int64{}
 
 //[roleID]emoji
 var RSEmoji = map[int64]string{}
@@ -102,9 +108,10 @@ func ReadConfig(path string) error {
 	Data.IDChannelRS6 = conf.Section(appMod).Key("IDChannelRS6").String()
 	Data.IDChannelRS5 = conf.Section(appMod).Key("IDChannelRS5").String()
 	Data.IDChannelRS4 = conf.Section(appMod).Key("IDChannelRS4").String()
-	Data.IDChannelBL6 = conf.Section(appMod).Key("IDChannelBL6").String()
-	Data.IDChannelBL5 = conf.Section(appMod).Key("IDChannelBL5").String()
-	Data.IDChannelBL4 = conf.Section(appMod).Key("IDChannelBL4").String()
+
+	Data.IDChannelBS = conf.Section(appMod).Key("IDChannelBS").String()
+	Data.NameChannelBS = conf.Section(appMod).Key("NameChannelBS").String()
+	Data.IDChannelGroupBS = conf.Section(appMod).Key("IDChannelGroupBS").String()
 
 	Data.NameChannelSelectRole = conf.Section(appMod).Key("NameChannelSelectRole").String()
 	Data.NameChannelRS11 = conf.Section(appMod).Key("NameChannelRS11").String()
@@ -117,7 +124,7 @@ func ReadConfig(path string) error {
 	Data.NameChannelRS4 = conf.Section(appMod).Key("NameChannelRS4").String()
 
 	Data.IDMsgRS = conf.Section(appMod).Key("IDMsgRS").String()
-	Data.IDMxdBL = conf.Section(appMod).Key("IDMxdBL").String()
+	Data.IDMsgBS = conf.Section(appMod).Key("IDMsgBS").String()
 
 	Data.RoleRS11 = conf.Section(appMod).Key("RoleRS11").MustInt64(343467)
 	Data.RoleRS10 = conf.Section(appMod).Key("RoleRS10").MustInt64(343467)
@@ -128,9 +135,14 @@ func ReadConfig(path string) error {
 	Data.RoleRS5 = conf.Section(appMod).Key("RoleRS5").MustInt64(343467)
 	Data.RoleRS4 = conf.Section(appMod).Key("RoleRS4").MustInt64(343467)
 
-	Data.RoleBL6 = conf.Section(appMod).Key("RoleBL6").MustInt64(343467)
-	Data.RoleBL5 = conf.Section(appMod).Key("RoleBL5").MustInt64(343467)
-	Data.RoleBL4 = conf.Section(appMod).Key("RoleBL4").MustInt64(343467)
+	Data.RoleBS8 = conf.Section(appMod).Key("RoleBS8").MustInt64(343467)
+	Data.RoleBS7 = conf.Section(appMod).Key("RoleBS7").MustInt64(343467)
+	Data.RoleBS6 = conf.Section(appMod).Key("RoleBS6").MustInt64(343467)
+	Data.RoleBS5 = conf.Section(appMod).Key("RoleBS5").MustInt64(343467)
+	Data.RoleBS4 = conf.Section(appMod).Key("RoleBS4").MustInt64(343467)
+	Data.RoleBS3 = conf.Section(appMod).Key("RoleBS3").MustInt64(343467)
+	Data.RoleBS2 = conf.Section(appMod).Key("RoleBS2").MustInt64(343467)
+	Data.RoleBS1 = conf.Section(appMod).Key("RoleBS1").MustInt64(343467)
 
 	Data.Prefix = conf.Section("common").Key("prefix").String()
 	Data.EmojiPointDown = conf.Section("common").Key("EmojiPointDown").String()
@@ -168,6 +180,15 @@ func ReadConfig(path string) error {
 	EmojiNum[2] = Data.EmojiThree
 	EmojiNum[3] = Data.EmojiFour
 
+	BSRoleNum[0] = Data.RoleBS1
+	BSRoleNum[1] = Data.RoleBS2
+	BSRoleNum[2] = Data.RoleBS3
+	BSRoleNum[3] = Data.RoleBS4
+	BSRoleNum[4] = Data.RoleBS5
+	BSRoleNum[5] = Data.RoleBS6
+	BSRoleNum[6] = Data.RoleBS7
+	BSRoleNum[7] = Data.RoleBS8
+
 	RSEmoji[Data.RoleRS4] = Data.EmojiFour
 	RSEmoji[Data.RoleRS5] = Data.EmojiFive
 	RSEmoji[Data.RoleRS6] = Data.EmojiSix
@@ -176,6 +197,15 @@ func ReadConfig(path string) error {
 	RSEmoji[Data.RoleRS9] = Data.EmojiNine
 	RSEmoji[Data.RoleRS10] = Data.EmojiTen
 	RSEmoji[Data.RoleRS11] = Data.EmojiEleven
+
+	RSEmoji[Data.RoleBS8] = Data.EmojiNeight
+	RSEmoji[Data.RoleBS7] = Data.EmojiSeven
+	RSEmoji[Data.RoleBS6] = Data.EmojiSix
+	RSEmoji[Data.RoleBS5] = Data.EmojiFive
+	RSEmoji[Data.RoleBS4] = Data.EmojiFour
+	RSEmoji[Data.RoleBS3] = Data.EmojiThree
+	RSEmoji[Data.RoleBS2] = Data.EmojiTwo
+	RSEmoji[Data.RoleBS1] = Data.EmojiOne
 
 	ChanRole[Data.IDChannelRS11] = Data.RoleRS11
 	ChanRole[Data.IDChannelRS10] = Data.RoleRS10
