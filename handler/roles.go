@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/eaok/ashe/config"
 	"github.com/lonelyevil/khl"
-	"github.com/phuslu/log"
 )
 
 func AddRole(roleID int64, roleName string, ctx *khl.ReactionAddContext) {
@@ -14,18 +12,21 @@ func AddRole(roleID int64, roleName string, ctx *khl.ReactionAddContext) {
 
 	if ctx.Extra.Emoji.Name == config.RSEmoji[roleID] ||
 		ctx.Extra.Emoji.Name == EmojiHexToDec(config.RSEmoji[roleID]) {
-		user, _ := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
+		user, err := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
+		if err != nil {
+			ctx.Session.Logger.Error().Err("", err).Msg("AddRole UserView")
+		}
 		for _, role := range user.Roles {
 			if int64(role) == roleID {
 				iFlagRoleExist = true
 			}
 		}
-		fmt.Println(user.Roles, iFlagRoleExist)
+		ctx.Session.Logger.Warn().Interface("user.Roles", user.Roles).Bool("iFlagRoleExist", iFlagRoleExist).Msg("AddRole")
 
 		if !iFlagRoleExist {
 			_, err := ctx.Session.GuildRoleGrant(ctx.Common.TargetID, ctx.Extra.UserID, roleID)
 			if err != nil {
-				log.Error().Err(errors.New("an error")).Msg("Role grant failed!")
+				ctx.Session.Logger.Error().Err("", err).Msg("AddRole GuildRoleGrant")
 				return
 			}
 
@@ -41,18 +42,21 @@ func DeleteRole(roleID int64, roleName string, ctx *khl.ReactionDeleteContext) {
 
 	if ctx.Extra.Emoji.Name == config.RSEmoji[roleID] ||
 		ctx.Extra.Emoji.Name == EmojiHexToDec(config.RSEmoji[roleID]) {
-		user, _ := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
+		user, err := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
+		if err != nil {
+			ctx.Session.Logger.Error().Err("", err).Msg("DeleteRole UserView")
+		}
 		for _, role := range user.Roles {
 			if int64(role) == roleID {
 				iFlagRoleExist = true
 			}
 		}
-		fmt.Println(user.Roles, iFlagRoleExist)
+		ctx.Session.Logger.Warn().Interface("user.Roles", user.Roles).Bool("iFlagRoleExist", iFlagRoleExist).Msg("DeleteRole")
 
 		if iFlagRoleExist {
 			_, err := ctx.Session.GuildRoleRevoke(ctx.Common.TargetID, ctx.Extra.UserID, roleID)
 			if err != nil {
-				log.Error().Err(errors.New("an error")).Msg("Role revoke failed!")
+				ctx.Session.Logger.Error().Err("", err).Msg("DeleteRole GuildRoleRevoke")
 				return
 			}
 
@@ -65,7 +69,7 @@ func DeleteRole(roleID int64, roleName string, ctx *khl.ReactionDeleteContext) {
 
 func AddRoles(ctx *khl.ReactionAddContext) error {
 	if ctx.Extra.MsgID == config.Data.IDMsgRS {
-		log.Info().Str("EmojiName", ctx.Extra.Emoji.Name).Str("DecEmojiTem", EmojiHexToDec(config.Data.EmojiTen)).Msg("AddRoles")
+		ctx.Session.Logger.Warn().Str("EmojiName", ctx.Extra.Emoji.Name).Str("DecEmojiTem", EmojiHexToDec(config.Data.EmojiTen)).Msg("AddRoles")
 
 		switch ctx.Extra.Emoji.Name {
 		case EmojiHexToDec(config.Data.EmojiEleven):
@@ -113,7 +117,7 @@ func AddRoles(ctx *khl.ReactionAddContext) error {
 
 func DeleteRoles(ctx *khl.ReactionDeleteContext) error {
 	if ctx.Extra.MsgID == config.Data.IDMsgRS {
-		log.Info().Str("EmojiName", ctx.Extra.Emoji.Name).Str("DecEmojiTem", EmojiHexToDec(config.Data.EmojiTen)).Msg("DeleteRoles")
+		ctx.Session.Logger.Warn().Str("EmojiName", ctx.Extra.Emoji.Name).Str("DecEmojiTem", EmojiHexToDec(config.Data.EmojiTen)).Msg("DeleteRoles")
 
 		switch ctx.Extra.Emoji.Name {
 		case EmojiHexToDec(config.Data.EmojiEleven):

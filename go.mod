@@ -12,4 +12,5 @@ require (
 )
 
 replace github.com/lonelyevil/khl => ../khl
+
 replace github.com/lonelyevil/khl/log_adapter/plog => ../khl/log_adapter/plog

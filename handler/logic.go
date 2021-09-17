@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -106,4 +107,25 @@ func EmojiHexToDec(emoji string) (str string) {
 	}
 
 	return
+}
+
+// 获取消息内容中的订单ID
+func GetMessageCoutent(session *khl.Session, channelID string, msgID string) string {
+	content := ""
+
+	ms, err := session.MessageList(channelID)
+	if err != nil {
+		session.Logger.Error().Err("", err).Msg("GetMessageCoutent")
+		return ""
+	}
+
+	r, _ := regexp.Compile("#[0-9]{4}")
+	for i := 0; i < len(ms); i++ {
+		if ms[i].ID == msgID {
+			content = r.FindString(ms[i].Content)
+			break
+		}
+	}
+
+	return content
 }

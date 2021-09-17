@@ -68,15 +68,11 @@ type BSusers struct {
 
 type BSTeamData struct {
 	sync.Mutex
-	ReactionAdd          chan *khl.ReactionAddContext
-	ReactionDelete       chan *khl.ReactionDeleteContext
 	MapBSAddGoroutine    map[string]chan *khl.ReactionAddContext
 	MapBSDeleteGoroutine map[string]chan *khl.ReactionDeleteContext
 }
 
 var BSteam = &BSTeamData{
-	ReactionAdd:          make(chan *khl.ReactionAddContext, 1),
-	ReactionDelete:       make(chan *khl.ReactionDeleteContext, 1),
 	MapBSAddGoroutine:    make(map[string]chan *khl.ReactionAddContext, 1),
 	MapBSDeleteGoroutine: make(map[string]chan *khl.ReactionDeleteContext, 1),
 }
@@ -84,33 +80,29 @@ var BSteam = &BSTeamData{
 // 蓝星呼叫僚机总函数
 func BSTeam(ctx *khl.TextMessageContext) {
 	startTime := time.Now()
-	fmt.Printf("content=%s TargetID=%s\n", ctx.Common.Content, ctx.Common.TargetID)
+	ctx.Session.Logger.Warn().Str("content", ctx.Common.Content).Str("TargetID", ctx.Common.TargetID).Msg("BSTeam")
 
 	if role := BSGetMaxRole(ctx.Session, ctx.Extra.Author.ID, ctx.Extra.GuildID); role != 0 {
 		resp, _ := BSFirstMessage(ctx, role, startTime)
 
-		chanDone := make(chan bool)
-		go BSGoroutine(ctx, resp.MsgID, chanDone, role, startTime)
-		go BSMapReactionGoroutine(ctx, resp.MsgID, chanDone)
-
+		go BSGoroutine(ctx, resp.MsgID, role, startTime)
 	} else {
 		SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 请先选择蓝星角色！", ctx.Extra.Author.ID))
+		ctx.Session.Logger.Warn().Msgf("%s 请先选择蓝星角色！", ctx.Extra.Author.Username)
 	}
 }
 
-func BSGoroutine(ctx *khl.TextMessageContext, msgID string, done chan bool, role int64, startTime time.Time) {
+func BSGoroutine(ctx *khl.TextMessageContext, msgID string, role int64, startTime time.Time) {
 	chanBS := make(chan bool, 1)
 	dict := map[string]BSusers{}
 
-	add := make(chan *khl.ReactionAddContext)
-	delete := make(chan *khl.ReactionDeleteContext)
 	BSteam.Mutex.Lock()
-	BSteam.MapBSAddGoroutine[msgID] = add
-	BSteam.MapBSDeleteGoroutine[msgID] = delete
+	BSteam.MapBSAddGoroutine[msgID] = make(chan *khl.ReactionAddContext)
+	BSteam.MapBSDeleteGoroutine[msgID] = make(chan *khl.ReactionDeleteContext)
 	BSteam.Mutex.Unlock()
 
 	// 主机数据先加入map中
-	dict[ctx.Extra.Author.ID] = BSusers{
+	dict["1"] = BSusers{
 		name:    ctx.Extra.Author.Username,
 		nameID:  ctx.Extra.Author.ID,
 		role:    role,
@@ -118,40 +110,42 @@ func BSGoroutine(ctx *khl.TextMessageContext, msgID string, done chan bool, role
 		time:    time.Now(),
 		timeout: startTime.Add(10*time.Minute).UnixNano() / 1e6,
 	}
+	// fmt.Println(BSteam.MapBSAddGoroutine)
+	// fmt.Println(BSteam.MapBSDeleteGoroutine)
 
 	for {
 		select {
-		case in := <-BSteam.MapBSAddGoroutine[msgID]:
-			fmt.Println("BSGoroutine", "in")
-			if ctx.Extra.Author.ID == in.Extra.UserID {
-				BSTeamDone(dict, in, chanBS, msgID)
+		case add := <-BSteam.MapBSAddGoroutine[msgID]:
+			if dict["1"].nameID == add.Extra.UserID {
+				BSTeamDone(dict, add, chanBS, msgID)
 			} else {
-				BSTeamIn(dict, in, msgID, chanBS, role)
+				BSTeamIn(dict, add, msgID, chanBS, role)
 			}
-		case out := <-BSteam.MapBSDeleteGoroutine[msgID]:
-			fmt.Println("BSGoroutine", "out")
-			BSTeamOut(dict, out, msgID)
+		case delete := <-BSteam.MapBSDeleteGoroutine[msgID]:
+			BSTeamOut(dict, delete, msgID)
 		case <-time.After(time.Until(startTime.Add(10 * time.Minute))):
-			fmt.Println("BSGoroutine", "timeout")
-			done <- true
 			return
 		case <-chanBS:
-			fmt.Println("BSGoroutine", "chanRS")
-			done <- true
 			return
 		}
+		// fmt.Println(BSteam.MapBSAddGoroutine)
+		// fmt.Println(BSteam.MapBSDeleteGoroutine)
 	}
 }
 
 // 加入僚机组
-func BSTeamIn(dict map[string]BSusers, in *khl.ReactionAddContext, msgID string, chanBS chan bool, masterRole int64) {
-	if role := BSGetMaxRole(in.Session, in.Common.AuthorID, in.Common.TargetID); role != 0 {
+func BSTeamIn(dict map[string]BSusers, ctx *khl.ReactionAddContext, msgID string, chanBS chan bool, masterRole int64) {
+	if role := BSGetMaxRole(ctx.Session, ctx.Common.AuthorID, ctx.Common.TargetID); role != 0 {
 		if BSGetIsMatch(role, masterRole) {
 			// 获取user信息
-			user, _ := in.Session.UserMe()
+			user, err := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
+			if err != nil {
+				ctx.Session.Logger.Error().Err("", err).Msg("BSTeamIn UserView")
+				return
+			}
 
 			// 满足条件，加入僚机组
-			dict[in.Common.AuthorID] = BSusers{
+			dict[ctx.Extra.UserID] = BSusers{
 				name:   user.Username,
 				nameID: user.ID,
 				role:   role,
@@ -161,7 +155,7 @@ func BSTeamIn(dict map[string]BSusers, in *khl.ReactionAddContext, msgID string,
 
 			// 更新消息
 			nameMaster, nameElse, timeout := BSTeamGetNames(dict)
-			in.Session.MessageUpdate(&khl.MessageUpdate{
+			ctx.Session.MessageUpdate(&khl.MessageUpdate{
 				MessageUpdateBase: khl.MessageUpdateBase{
 					MsgID:   msgID,
 					Content: fmt.Sprintf(BlueText, nameMaster, nameElse, timeout),
@@ -169,29 +163,32 @@ func BSTeamIn(dict map[string]BSusers, in *khl.ReactionAddContext, msgID string,
 			})
 
 			if len(dict) == 4 {
-				BSTeamDone(dict, in, chanBS, msgID)
+				BSTeamDone(dict, ctx, chanBS, msgID)
 			}
 		} else {
-			SendTempMessage(in.Session, in.Common.TargetID, fmt.Sprintf("(met)%s(met) 你们战舰配置相差太大，匹配不到一起！", in.Extra.UserID))
+			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 你们战舰配置相差太大，匹配不到一起！", ctx.Extra.UserID))
+			ctx.Session.Logger.Warn().Msgf("%s 你们战舰配置相差太大，匹配不到一起！", ctx.Extra.UserID)
 		}
 	} else {
-		SendTempMessage(in.Session, in.Common.TargetID, fmt.Sprintf("(met)%s(met) 请先选择蓝星角色！", in.Extra.UserID))
+		SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 请先选择蓝星角色！", ctx.Extra.UserID))
+		ctx.Session.Logger.Warn().Msgf("%s 请先选择蓝星角色！", ctx.Extra.UserID)
 	}
 }
 
 // 退出僚机组
-func BSTeamOut(dict map[string]BSusers, out *khl.ReactionDeleteContext, msgID string) {
+func BSTeamOut(dict map[string]BSusers, ctx *khl.ReactionDeleteContext, msgID string) {
 	// 检查用户是否在僚机组中
-	if _, ok := dict[out.Extra.UserID]; !ok {
-		SendTempMessage(out.Session, out.Common.TargetID, fmt.Sprintf("(met)%s(met) 你没有在僚机队伍中！", out.Extra.MsgID))
+	if _, ok := dict[ctx.Extra.UserID]; !ok {
+		SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 你没有在僚机队伍中！", ctx.Extra.UserID))
+		ctx.Session.Logger.Warn().Msgf("%s 你没有在僚机队伍中！", ctx.Extra.UserID)
 		return
 	} else {
 		// 离开僚机组
-		delete(dict, out.Extra.UserID)
+		delete(dict, ctx.Extra.UserID)
 
 		// 更新消息
 		nameMaster, nameElse, timeout := BSTeamGetNames(dict)
-		out.Session.MessageUpdate(&khl.MessageUpdate{
+		ctx.Session.MessageUpdate(&khl.MessageUpdate{
 			MessageUpdateBase: khl.MessageUpdateBase{
 				MsgID:   msgID,
 				Content: fmt.Sprintf(BlueText, nameMaster, nameElse, timeout),
@@ -245,6 +242,11 @@ func BSTeamDone(dict map[string]BSusers, ctx *khl.ReactionAddContext, chanBS cha
 			// Content:  fmt.Sprintf("%s蓝星呼叫僚机已经完成。。。 \n已经创建语音频道(chn)%s(chn)，点击可以加入 \n---\n", ment, c.ID),
 		},
 	})
+
+	BSteam.Lock()
+	delete(BSteam.MapBSAddGoroutine, msgID)
+	delete(BSteam.MapBSDeleteGoroutine, msgID)
+	BSteam.Unlock()
 
 	chanBS <- true
 }
@@ -313,21 +315,6 @@ func BSGetIsMatch(role, masterRole int64) bool {
 	return math.Abs(float64(roleIndex-masterRoleIndex)) < 3
 }
 
-// reaction发送到指定goroutine
-func BSMapReactionGoroutine(ctx *khl.TextMessageContext, msgID string, done chan bool) {
-	for {
-		select {
-		case add := <-BSteam.ReactionAdd:
-			BSteam.MapBSAddGoroutine[msgID] <- add
-		case delete := <-BSteam.ReactionDelete:
-			BSteam.MapBSDeleteGoroutine[msgID] <- delete
-		case <-done:
-			fmt.Printf("a blue team complete! BSMapReactionGoroutine\n")
-			return
-		}
-	}
-}
-
 // 发送初始消息
 func BSFirstMessage(ctx *khl.TextMessageContext, role int64, startTime time.Time) (resp *khl.MessageResp, err error) {
 	name := fmt.Sprintf("%s %s %15s", config.RSEmoji[role], ctx.Extra.Author.Username, time.Now().Format("15 : 04"))
@@ -347,7 +334,10 @@ func BSFirstMessage(ctx *khl.TextMessageContext, role int64, startTime time.Time
 
 // 获取用户最大的蓝星角色
 func BSGetMaxRole(s *khl.Session, userID string, guildID string) int64 {
-	user, _ := s.UserView(userID, khl.UserViewWithGuildID(guildID))
+	user, err := s.UserView(userID, khl.UserViewWithGuildID(guildID))
+	if err != nil {
+		s.Logger.Error().Err("", err).Msg("BSGetMaxRole UserView")
+	}
 
 	for i := 7; i >= 0; i-- {
 		for _, role := range user.Roles {

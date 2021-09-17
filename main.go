@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -30,7 +29,9 @@ func main() {
 	}()
 
 	s := khl.New(config.Data.Token, plog.NewLogger(&log.Logger{
-		Level: log.ErrorLevel,
+		Level:      log.WarnLevel,
+		TimeFormat: "2006-01-02 15:04:05",
+		Caller:     1,
 		Writer: &log.ConsoleWriter{
 			ColorOutput:    true,
 			QuoteString:    true,
@@ -44,12 +45,12 @@ func main() {
 	// need to open the socket
 	err := s.Open()
 	if err != nil {
-		fmt.Println("error opening connection,", err)
+		s.Logger.Error().Err("", err).Msg("error opening connection")
 		return
 	}
 
 	// Wait here until CTRL-C or other term signal is received.
-	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
+	s.Logger.Warn().Msg("Bot is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc

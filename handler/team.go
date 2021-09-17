@@ -87,7 +87,7 @@ func TeamGoroutin(session *khl.Session, channelID string) {
 		wait.Add(1)
 		go TeamStartChannel(session, channelID, &wait)
 		wait.Wait()
-		fmt.Printf("%s team has done!\n", config.RSEmoji[config.ChanRole[channelID]])
+		session.Logger.Warn().Interface("ChanRole[channelID]]", config.RSEmoji[config.ChanRole[channelID]]).Msg("TeamGoroutin done")
 	}
 }
 
@@ -110,10 +110,10 @@ func TeamStartChannel(session *khl.Session, ChannelID string, wait *sync.WaitGro
 		select {
 		case in := <-teamIn:
 			TeamIn(dict, in, chanRS)
-			fmt.Printf("dict %v\n", dict)
+			session.Logger.Warn().Interface("dict", dict).Str("Content", in.Common.Content).Msg("TeamStartChannel")
 		case out := <-teamOut:
 			TeamOut(dict, out)
-			fmt.Printf("dict %v\n", dict)
+			session.Logger.Warn().Interface("dict", dict).Str("Content", out.Common.Content).Msg("TeamStartChannel")
 		case <-chanRS:
 			wait.Done()
 			return
@@ -159,7 +159,6 @@ func TeamGetSortNames(dict map[string]users) string {
 			EmojiIndex++
 		}
 	}
-	fmt.Println("names", names, "TeamGetSortNames")
 
 	return names
 }
@@ -174,9 +173,7 @@ func TeamMember(dict map[string]users) int {
 	return teamMember
 }
 
-func TeamIn(dict map[string]users, ctx *khl.TextMessageContext, close chan bool) error {
-	fmt.Println("teamIn", ctx.Common.Content)
-
+func TeamIn(dict map[string]users, ctx *khl.TextMessageContext, close chan bool) {
 	// 处理指令参数
 	var count int
 	if len(RemovePrefix(ctx.Common.Content)) > 2 {
@@ -184,7 +181,8 @@ func TeamIn(dict map[string]users, ctx *khl.TextMessageContext, close chan bool)
 		count, _ = strconv.Atoi(content[1])
 		if count < 1 || count > 4 {
 			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
-			return nil
+			ctx.Session.Logger.Warn().Msgf("%s 输入参数错误！", ctx.Extra.Author.Username)
+			return
 		}
 	} else if len(RemovePrefix(ctx.Common.Content)) == 2 {
 		count = 1
@@ -193,12 +191,14 @@ func TeamIn(dict map[string]users, ctx *khl.TextMessageContext, close chan bool)
 	// Check user whether it is in team
 	if u, ok := dict[ctx.Extra.Author.ID]; ok {
 		SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 你已经在队伍中！", u.nameID))
-		return nil
+		ctx.Session.Logger.Warn().Msgf("%s 你已经在队伍中！", ctx.Extra.Author.Username)
+		return
 	} else {
 		// 判断count和已有人数是否超额
 		if TeamMember(dict)+count > 4 {
 			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 人数已经超过4人！", u.nameID))
-			return nil
+			ctx.Session.Logger.Warn().Msgf("%s 人数已经超过4人！", ctx.Extra.Author.Username)
+			return
 		}
 
 		// join the team
@@ -212,7 +212,8 @@ func TeamIn(dict map[string]users, ctx *khl.TextMessageContext, close chan bool)
 		// channelID获取channelName guildID
 		ch, err := ctx.Session.ChannelView(ctx.Common.TargetID)
 		if err != nil {
-			return err
+			ctx.Session.Logger.Error().Err("", err).Msg("TeamIn ChannelView")
+			return
 		}
 
 		// send new message
@@ -229,23 +230,21 @@ func TeamIn(dict map[string]users, ctx *khl.TextMessageContext, close chan bool)
 			teamDone(dict, ctx, close)
 		}
 	}
-
-	return nil
 }
 
-func TeamOut(dict map[string]users, ctx *khl.TextMessageContext) error {
-	fmt.Println("teamOut", ctx.Common.Content)
-
+func TeamOut(dict map[string]users, ctx *khl.TextMessageContext) {
 	// 处理指令参数 out 没有参数
 	if len(RemovePrefix(ctx.Common.Content)) > 3 {
 		SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
-		return nil
+		ctx.Session.Logger.Warn().Msgf("%s 输入参数错误！", ctx.Extra.Author.Username)
+		return
 	}
 
 	// Check user whether it is in team
 	if _, ok := dict[ctx.Extra.Author.ID]; !ok {
 		SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 你没有在队伍中！", ctx.Extra.Author.ID))
-		return nil
+		ctx.Session.Logger.Warn().Msgf("%s 输入参数错误！", ctx.Extra.Author.Username)
+		return
 	} else {
 		// leave the team
 		delete(dict, ctx.Extra.Author.ID)
@@ -253,7 +252,8 @@ func TeamOut(dict map[string]users, ctx *khl.TextMessageContext) error {
 		// channelID获取channelName guildID
 		ch, err := ctx.Session.ChannelView(ctx.Common.TargetID)
 		if err != nil {
-			return err
+			ctx.Session.Logger.Error().Err("", err).Msg("TeamOut ChannelView")
+			return
 		}
 
 		// send new message
@@ -266,12 +266,10 @@ func TeamOut(dict map[string]users, ctx *khl.TextMessageContext) error {
 			},
 		})
 	}
-
-	return nil
 }
 
 func teamDone(dict map[string]users, ctx *khl.TextMessageContext, close chan bool) error {
-	fmt.Println("teamDone")
+	ctx.Session.Logger.Warn().Interface("dict", dict).Msg("teamDone")
 
 	ment := ""
 	for key := range dict {

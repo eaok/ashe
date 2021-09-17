@@ -1,7 +1,6 @@
 package router
 
 import (
-	"github.com/eaok/ashe/config"
 	"github.com/eaok/ashe/handler"
 	"github.com/lonelyevil/khl"
 )
@@ -31,15 +30,18 @@ func InitAction(s *khl.Session) {
 }
 
 func Route(s *khl.Session) {
-	if config.Data.RunMod == "debug" {
-		s.AddHandler(handler.AutoDelete)
-	}
-	s.AddHandler(handler.Ping)
+	s.AddHandler(handler.AutoDelete)
+
+	// 监听事件
 	s.AddHandler(handler.CardButton)
 	s.AddHandler(handler.AddReaction)
 	s.AddHandler(handler.DeleteReaction)
+
+	// 指令
+	s.AddHandler(handler.Ping)
 	s.AddHandler(handler.InTeam)
 	s.AddHandler(handler.OutTeam)
 	s.AddHandler(handler.Blue)
+	s.AddHandler(handler.Order)
 	s.AddHandler(handler.Help)
 }

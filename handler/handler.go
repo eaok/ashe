@@ -2,80 +2,26 @@ package handler
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/eaok/ashe/config"
 	"github.com/lonelyevil/khl"
-	"github.com/phuslu/log"
 )
-
-func CardButton(ctx *khl.MessageButtonClickContext) {
-	fmt.Printf("value=%s msgID=%s userID=%s\n", ctx.Extra.Value, ctx.Extra.MsgID, ctx.Extra.UserID)
-
-	// team.ReactionAdd <- ctx
-}
-
-func AddReaction(ctx *khl.ReactionAddContext) {
-	fmt.Println(ctx.Extra.Emoji.Name, "AddReaction", ctx.Extra.ChannelID)
-
-	// 根据userID获取username
-	uv, err := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
-	if err != nil {
-		log.Error().Err(err).Msg("AddReaction")
-	}
-	// bot event ignore
-	if uv.Bot {
-		return
-	}
-
-	// 角色选择频道
-	if ctx.Extra.ChannelID == config.Data.IDChannelSelectRole {
-		if err := AddRoles(ctx); err != nil {
-			log.Error().Err(err).Msg("AddReaction")
-			return
-		}
-	} else if ctx.Extra.ChannelID == config.Data.IDChannelBS {
-		if ctx.Extra.Emoji.ID == config.Data.EmojiCheckMark {
-			BSteam.ReactionAdd <- ctx
-		}
-	}
-}
-
-func DeleteReaction(ctx *khl.ReactionDeleteContext) {
-	fmt.Println(ctx.Extra.Emoji.Name, "DeleteReaction")
-
-	// 根据userID获取username
-	uv, err := ctx.Session.UserView(ctx.Extra.UserID, khl.UserViewWithGuildID(ctx.Common.TargetID))
-	if err != nil {
-		log.Error().Err(err).Msg("DeleteReaction")
-	}
-	// bot event ignore
-	if uv.Bot {
-		return
-	}
-
-	// 角色选择频道
-	if ctx.Extra.ChannelID == config.Data.IDChannelSelectRole {
-		if err := DeleteRoles(ctx); err != nil {
-			log.Error().Err(err).Msg("DeleteReaction")
-			return
-		}
-	} else if ctx.Extra.ChannelID == config.Data.IDChannelBS {
-		if ctx.Extra.Emoji.ID == config.Data.EmojiCheckMark {
-			BSteam.ReactionDelete <- ctx
-		}
-	}
-}
 
 // auto delete messages
 func AutoDelete(ctx *khl.TextMessageContext) {
-	// non bot messages are automatically deleted
-	if !ctx.Extra.Author.Bot && BotTakeOverGroup(ctx.Extra.ChannelName) {
-		go func() {
-			time.Sleep(15 * time.Second)
-			ctx.Session.MessageDelete(ctx.Common.MsgID)
-		}()
+	ctx.Session.Logger.Warn().Str("content", ctx.Common.Content).Str("userName", ctx.Extra.Author.Username).Str("ChannelName", ctx.Extra.ChannelName).Msg("AutoDelete")
+
+	if config.Data.RunMod == "debug" {
+		// non bot messages are automatically deleted
+		if !ctx.Extra.Author.Bot && BotTakeOverGroup(ctx.Extra.ChannelName) {
+			go func() {
+				time.Sleep(15 * time.Second)
+				ctx.Session.MessageDelete(ctx.Common.MsgID)
+			}()
+		}
 	}
 }
 
@@ -131,6 +77,22 @@ func Blue(ctx *khl.TextMessageContext) {
 	}
 }
 
+func Order(ctx *khl.TextMessageContext) {
+	if strings.HasPrefix(RemovePrefix(ctx.Common.Content), "order") {
+		if ctx.Common.TargetID == config.Data.IDChannelTradePublish {
+			// https://c.runoob.com/front-end/854/
+			if matched, _ := regexp.MatchString(`^order\s([0-9]s[0-9]+\s)+[0-9]+s[tco]{1,3}$`, RemovePrefix(ctx.Common.Content)); matched {
+				go TradeOrder(ctx)
+			} else {
+				SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
+			}
+
+		} else {
+			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 发布订单频道专属指令，请在发布订单频道输入！", ctx.Extra.Author.ID))
+		}
+	}
+}
+
 func Help(ctx *khl.TextMessageContext) {
 	// Ignore all messages created by the bot itself
 	if ctx.Extra.Author.Bot {
@@ -146,6 +108,7 @@ func Help(ctx *khl.TextMessageContext) {
 		text += fmt.Sprintf("%-7s:    %s\n", "in", "加入车队中，可跟数字[1-3]")
 		text += fmt.Sprintf("%-7s:    %s\n", "out", "离开车队")
 		text += fmt.Sprintf("%-7s:    %s\n", "bb", "创建一个10分钟的蓝星呼叫僚机队列")
+		text += fmt.Sprintf("%-7s:    %s\n", "order", "创建一个交易订单")
 		text += fmt.Sprintf("%-7s:    %s\n", "help", "查看指令帮助菜单")
 		text += "```"
 

@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/base64"
-	"fmt"
 
 	"github.com/go-ini/ini"
 )
@@ -38,6 +37,10 @@ type ConfigData struct {
 	IDChannelRS6        string
 	IDChannelRS5        string
 	IDChannelRS4        string
+
+	IDChannelTradePublish string
+	IDChannelTradeWait    string
+	IDChannelTradeAccept  string
 
 	NameChannelSelectRole string
 	NameChannelRS11       string
@@ -93,7 +96,6 @@ func checkError(err error) {
 
 // read config.json and get a Token
 func ReadConfig(path string) error {
-	fmt.Println("Reading from config file...")
 	conf, err := ini.Load(path)
 	checkError(err)
 
@@ -122,6 +124,10 @@ func ReadConfig(path string) error {
 	Data.NameChannelRS6 = conf.Section(appMod).Key("NameChannelRS6").String()
 	Data.NameChannelRS5 = conf.Section(appMod).Key("NameChannelRS5").String()
 	Data.NameChannelRS4 = conf.Section(appMod).Key("NameChannelRS4").String()
+
+	Data.IDChannelTradePublish = conf.Section(appMod).Key("IDChannelTradePublish").String()
+	Data.IDChannelTradeWait = conf.Section(appMod).Key("IDChannelTradeWait").String()
+	Data.IDChannelTradeAccept = conf.Section(appMod).Key("IDChannelTradeAccept").String()
 
 	Data.IDMsgRS = conf.Section(appMod).Key("IDMsgRS").String()
 	Data.IDMsgBS = conf.Section(appMod).Key("IDMsgBS").String()
@@ -168,11 +174,10 @@ func ReadConfig(path string) error {
 	Data.RunMod = appMod
 
 	// test
-	// Data.Token = "1/MTA0NzY=/XLUOtvHDdNSlFZG7D9OJ+A=="
+	Data.Token = "1/MTA0NzY=/XLUOtvHDdNSlFZG7D9OJ+A=="
 
-	fmt.Println("Got Token:  " + Data.Token)
-	fmt.Println("Got Prefix: " + Data.Prefix)
-	fmt.Println("Got appMod:  " + Data.RunMod)
+	// fmt.Println("Got Prefix: " + Data.Prefix)
+	// fmt.Println("Got appMod:  " + Data.RunMod)
 
 	// 给全局变量赋值
 	EmojiNum[0] = Data.EmojiOne
