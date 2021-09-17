@@ -61,7 +61,7 @@ var TextTradePublish = `
         "type": "section",
         "text": {
           "type": "plain-text",
-          "content": "当前折扣：%d%%+2%%"
+          "content": "当前折扣：%d%%"
         }
       },
 	  {
@@ -77,13 +77,16 @@ var TextTradePublish = `
 
 var OrderNum = 1000
 
-var TradePrice = [6][6]float64{
+var TradePrice = [8][7]float64{
 	{2.5, 2},
-	{4, 3, 2},
-	{5, 4, 3, 2},
-	{7, 5, 4, 3, 2},
-	{0, 0, 7, 5, 4, 3},
-	{0, 0, 8, 6, 5, 4},
+	{3.5, 2.5, 2},
+	{4.5, 3.5, 2.5, 2},
+	{5.5, 4.5, 3.5, 2.5, 2},
+	{0, 0, 5.5, 4.5, 3.5, 3},
+	{0, 0, 12, 8, 6, 4.5, 4.5},
+
+	{0, 0, 7, 6, 5, 4},       // 10t
+	{0, 0, 24, 14, 11, 8, 8}, // 11t
 }
 
 type TradeContent struct {
@@ -506,16 +509,16 @@ func TradeGetTargetNum(trade *TradeContent) {
 	copy(tradeBak.Cargo, trade.Cargo)
 
 	for i := 0; i < len(trade.Cargo); i++ {
-		if tradeBak.Target.Grade == 10 && strings.Contains(trade.Target.Kind, "t") {
+		if ((tradeBak.Target.Grade == 10) || (tradeBak.Target.Grade == 11)) && strings.Contains(trade.Target.Kind, "t") {
 			switch TradeGetKind(trade.Target.Kind) {
 			case 1:
-				trade.Target.Purple += int(math.Round(float64(tradeBak.Cargo[i].cargoNum) / TradePrice[5][tradeBak.Cargo[i].CargoGrade-4]))
+				trade.Target.Purple += int(math.Round(float64(tradeBak.Cargo[i].cargoNum) / TradePrice[tradeBak.Target.Grade-4][tradeBak.Cargo[i].CargoGrade-4]))
 			case 2:
-				trade.Target.Purple += int(math.Round(float64(tradeBak.Cargo[i].cargoNum) / (TradePrice[5][tradeBak.Cargo[i].CargoGrade-4] * 2)))
-				tradeBak.Cargo[i].cargoNum -= int(TradePrice[5][tradeBak.Cargo[i].CargoGrade-4] * float64(trade.Target.Purple))
+				trade.Target.Purple += int(math.Round(float64(tradeBak.Cargo[i].cargoNum) / (TradePrice[tradeBak.Target.Grade-4][tradeBak.Cargo[i].CargoGrade-4] * 2)))
+				tradeBak.Cargo[i].cargoNum -= int(TradePrice[tradeBak.Target.Grade-4][tradeBak.Cargo[i].CargoGrade-4] * float64(trade.Target.Purple))
 			case 3:
-				trade.Target.Purple += int(math.Round(float64(tradeBak.Cargo[i].cargoNum) / (TradePrice[5][tradeBak.Cargo[i].CargoGrade-4] * 3)))
-				tradeBak.Cargo[i].cargoNum -= int(TradePrice[5][tradeBak.Cargo[i].CargoGrade-4] * float64(trade.Target.Purple))
+				trade.Target.Purple += int(math.Round(float64(tradeBak.Cargo[i].cargoNum) / (TradePrice[tradeBak.Target.Grade-4][tradeBak.Cargo[i].CargoGrade-4] * 3)))
+				tradeBak.Cargo[i].cargoNum -= int(TradePrice[tradeBak.Target.Grade-4][tradeBak.Cargo[i].CargoGrade-4] * float64(trade.Target.Purple))
 			}
 		}
 		count += float64(tradeBak.Cargo[i].cargoNum) / TradePrice[tradeBak.Target.Grade-6][tradeBak.Cargo[i].CargoGrade-4]
@@ -524,13 +527,13 @@ func TradeGetTargetNum(trade *TradeContent) {
 	count = count * (1.0 + float64(discount+2)/100)
 	countNum := int(math.Round(float64(count)))
 
-	if tradeBak.Target.Grade == 10 && strings.Contains(trade.Target.Kind, "t") {
+	if ((tradeBak.Target.Grade == 10) || (tradeBak.Target.Grade == 11)) && strings.Contains(trade.Target.Kind, "t") {
 		trade.Target.Purple = int(float64(trade.Target.Purple) * (1.0 + float64(discount+2)/100))
 	}
 
 	switch TradeGetKind(trade.Target.Kind) {
 	case 1:
-		if trade.Target.Grade == 10 && strings.Contains(trade.Target.Kind, "t") {
+		if ((tradeBak.Target.Grade == 10) || (tradeBak.Target.Grade == 11)) && strings.Contains(trade.Target.Kind, "t") {
 			break
 		}
 		switch trade.Target.Kind {
@@ -543,7 +546,7 @@ func TradeGetTargetNum(trade *TradeContent) {
 		}
 	case 2:
 		for i := 0; i < len(trade.Target.Kind); i++ {
-			if trade.Target.Grade == 10 && strings.Contains(trade.Target.Kind, "t") {
+			if ((tradeBak.Target.Grade == 10) || (tradeBak.Target.Grade == 11)) && strings.Contains(trade.Target.Kind, "t") {
 				switch string(trade.Target.Kind[i]) {
 				case "c":
 					trade.Target.Blue = countNum
@@ -573,7 +576,7 @@ func TradeGetTargetNum(trade *TradeContent) {
 			}
 		}
 	case 3:
-		if trade.Target.Grade == 10 && strings.Contains(trade.Target.Kind, "t") {
+		if ((tradeBak.Target.Grade == 10) || (tradeBak.Target.Grade == 11)) && strings.Contains(trade.Target.Kind, "t") {
 			for i := 0; i < countNum; i++ {
 				switch i % 2 {
 				case 0:
