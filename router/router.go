@@ -42,6 +42,7 @@ func Route(s *khl.Session) {
 	s.AddHandler(handler.InTeam)
 	s.AddHandler(handler.OutTeam)
 	s.AddHandler(handler.Blue)
+	s.AddHandler(handler.Rate)
 	s.AddHandler(handler.Order)
 	s.AddHandler(handler.Help)
 }

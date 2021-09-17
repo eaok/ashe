@@ -77,6 +77,28 @@ func Blue(ctx *khl.TextMessageContext) {
 	}
 }
 
+func Rate(ctx *khl.TextMessageContext) {
+	if ctx.Common.Type != khl.MessageTypeText || ctx.Extra.Author.Bot {
+		return
+	}
+	if RemovePrefix(ctx.Common.Content) == "rate" {
+		resp, _ := ctx.Session.MessageCreate(&khl.MessageCreate{
+			MessageCreateBase: khl.MessageCreateBase{
+				TargetID: ctx.Common.TargetID,
+				Content:  "https://img.kaiheila.cn/assets/2021-09/Q7l3QGSYvd0po07q.png",
+			},
+		})
+
+		// bot take over group auto delete message!
+		if BotTakeOverGroup(ctx.Extra.ChannelName) {
+			go func() {
+				time.Sleep(15 * time.Second)
+				ctx.Session.MessageDelete(resp.MsgID)
+			}()
+		}
+	}
+}
+
 func Order(ctx *khl.TextMessageContext) {
 	if strings.HasPrefix(RemovePrefix(ctx.Common.Content), "order") {
 		if ctx.Common.TargetID == config.Data.IDChannelTradePublish {
@@ -108,6 +130,7 @@ func Help(ctx *khl.TextMessageContext) {
 		text += fmt.Sprintf("%-7s:    %s\n", "in", "加入车队中，可跟数字[1-3]")
 		text += fmt.Sprintf("%-7s:    %s\n", "out", "离开车队")
 		text += fmt.Sprintf("%-7s:    %s\n", "bb", "创建一个10分钟的蓝星呼叫僚机队列")
+		text += fmt.Sprintf("%-7s:    %s\n", "rate", "查看神器交易价格")
 		text += fmt.Sprintf("%-7s:    %s\n", "order", "创建一个交易订单")
 		text += fmt.Sprintf("%-7s:    %s\n", "help", "查看指令帮助菜单")
 		text += "```"
