@@ -50,7 +50,12 @@ func Ping(ctx *khl.TextMessageContext) {
 func InTeam(ctx *khl.TextMessageContext) {
 	if strings.HasPrefix(RemovePrefix(ctx.Common.Content), "in") {
 		if BotTakeOverRSGroup(ctx.Extra.ChannelName) {
-			team.OrderIn <- ctx
+			if matched, _ := regexp.MatchString(`^in(\s[1-4])?$`, RemovePrefix(ctx.Common.Content)); matched {
+				team.MapInGoroutine[ctx.Common.TargetID] <- ctx
+			} else {
+				SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
+				ctx.Session.Logger.Warn().Msgf("%s 输入参数错误！", ctx.Extra.Author.Username)
+			}
 		} else {
 			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 红星频道专属指令，请在红星频道输入！", ctx.Extra.Author.ID))
 		}
@@ -60,7 +65,7 @@ func InTeam(ctx *khl.TextMessageContext) {
 func OutTeam(ctx *khl.TextMessageContext) {
 	if RemovePrefix(ctx.Common.Content) == "out" {
 		if BotTakeOverRSGroup(ctx.Extra.ChannelName) {
-			team.OrderOut <- ctx
+			team.MapOutGoroutine[ctx.Common.TargetID] <- ctx
 		} else {
 			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 红星频道专属指令，请在红星频道输入！", ctx.Extra.Author.ID))
 		}

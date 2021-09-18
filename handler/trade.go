@@ -147,12 +147,21 @@ func TradeOrder(ctx *khl.TextMessageContext) {
 	OrderNum++
 	TradeGetData(ctx, &trade, OrderNum)
 
-	Trade.Mutex.Lock()
+	Trade.Lock()
 	Trade.TradeAddCross[trade.OrderNum] = make(chan *khl.ReactionAddContext)
 	Trade.TradeAddNum[trade.OrderNum] = make(chan *khl.ReactionAddContext)
 	Trade.TradeAddCheck[trade.OrderNum] = make(chan *khl.ReactionAddContext)
 	Trade.TradeDeleteCheck[trade.OrderNum] = make(chan *khl.ReactionDeleteContext)
-	Trade.Mutex.Unlock()
+	Trade.Unlock()
+
+	defer func() {
+		Trade.Lock()
+		delete(Trade.TradeAddCross, trade.OrderNum)
+		delete(Trade.TradeAddNum, trade.OrderNum)
+		delete(Trade.TradeAddCheck, trade.OrderNum)
+		delete(Trade.TradeDeleteCheck, trade.OrderNum)
+		Trade.Unlock()
+	}()
 
 	TradeFirstMessage(ctx, &trade)
 	// 发布订单者先加入map中

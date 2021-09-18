@@ -96,10 +96,19 @@ func BSGoroutine(ctx *khl.TextMessageContext, msgID string, role int64, startTim
 	chanBS := make(chan bool, 1)
 	dict := map[string]BSusers{}
 
-	BSteam.Mutex.Lock()
+	BSteam.Lock()
 	BSteam.MapBSAddGoroutine[msgID] = make(chan *khl.ReactionAddContext)
 	BSteam.MapBSDeleteGoroutine[msgID] = make(chan *khl.ReactionDeleteContext)
-	BSteam.Mutex.Unlock()
+	// fmt.Println(BSteam.MapBSAddGoroutine)
+	// fmt.Println(BSteam.MapBSDeleteGoroutine)
+	BSteam.Unlock()
+
+	defer func() {
+		BSteam.Lock()
+		delete(BSteam.MapBSAddGoroutine, msgID)
+		delete(BSteam.MapBSDeleteGoroutine, msgID)
+		BSteam.Unlock()
+	}()
 
 	// 主机数据先加入map中
 	dict["1"] = BSusers{
@@ -110,8 +119,6 @@ func BSGoroutine(ctx *khl.TextMessageContext, msgID string, role int64, startTim
 		time:    time.Now(),
 		timeout: startTime.Add(10*time.Minute).UnixNano() / 1e6,
 	}
-	// fmt.Println(BSteam.MapBSAddGoroutine)
-	// fmt.Println(BSteam.MapBSDeleteGoroutine)
 
 	for {
 		select {
@@ -128,8 +135,10 @@ func BSGoroutine(ctx *khl.TextMessageContext, msgID string, role int64, startTim
 		case <-chanBS:
 			return
 		}
+		// BSteam.Lock()
 		// fmt.Println(BSteam.MapBSAddGoroutine)
 		// fmt.Println(BSteam.MapBSDeleteGoroutine)
+		// BSteam.Unlock()
 	}
 }
 
@@ -242,11 +251,6 @@ func BSTeamDone(dict map[string]BSusers, ctx *khl.ReactionAddContext, chanBS cha
 			// Content:  fmt.Sprintf("%s蓝星呼叫僚机已经完成。。。 \n已经创建语音频道(chn)%s(chn)，点击可以加入 \n---\n", ment, c.ID),
 		},
 	})
-
-	BSteam.Lock()
-	delete(BSteam.MapBSAddGoroutine, msgID)
-	delete(BSteam.MapBSDeleteGoroutine, msgID)
-	BSteam.Unlock()
 
 	chanBS <- true
 }

@@ -32,11 +32,11 @@ func main() {
 		Level:      log.WarnLevel,
 		TimeFormat: "2006-01-02 15:04:05",
 		Caller:     1,
-		Writer: &log.ConsoleWriter{
-			ColorOutput:    true,
-			QuoteString:    true,
-			EndWithMessage: true,
-		},
+		// Writer: &log.ConsoleWriter{
+		// 	ColorOutput:    true,
+		// 	QuoteString:    true,
+		// 	EndWithMessage: true,
+		// },
 	}))
 
 	router.InitAction(s)

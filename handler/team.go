@@ -21,8 +21,6 @@ type users struct {
 
 type TeamData struct {
 	sync.Mutex
-	OrderIn         chan *khl.TextMessageContext
-	OrderOut        chan *khl.TextMessageContext
 	MapInGoroutine  map[string]chan *khl.TextMessageContext
 	MapOutGoroutine map[string]chan *khl.TextMessageContext
 }
@@ -52,8 +50,6 @@ var Text = `[{
 }]`
 
 var team = &TeamData{
-	OrderIn:         make(chan *khl.TextMessageContext, 1),
-	OrderOut:        make(chan *khl.TextMessageContext, 1),
 	MapInGoroutine:  make(map[string]chan *khl.TextMessageContext),
 	MapOutGoroutine: make(map[string]chan *khl.TextMessageContext),
 }
@@ -67,18 +63,6 @@ func TeamStart(s *khl.Session) {
 	go TeamGoroutin(s, config.Data.IDChannelRS6)
 	go TeamGoroutin(s, config.Data.IDChannelRS5)
 	go TeamGoroutin(s, config.Data.IDChannelRS4)
-
-	// in out 发送到指定goroutine
-	go func() {
-		for {
-			select {
-			case in := <-team.OrderIn:
-				team.MapInGoroutine[in.Common.TargetID] <- in
-			case out := <-team.OrderOut:
-				team.MapOutGoroutine[out.Common.TargetID] <- out
-			}
-		}
-	}()
 }
 
 func TeamGoroutin(session *khl.Session, channelID string) {
@@ -96,22 +80,27 @@ func TeamStartChannel(session *khl.Session, ChannelID string, wait *sync.WaitGro
 	dict := map[string]users{}
 	chanRS := make(chan bool, 1)
 
-	teamIn := make(chan *khl.TextMessageContext, 1)
-	teamOut := make(chan *khl.TextMessageContext, 1)
-
 	// 填充频道和chan通道的map，实现往指定goroutine发送数据
 	// 并发访问map不安全，会出现fatal error: concurrent map writes
-	team.Mutex.Lock()
-	team.MapInGoroutine[ChannelID] = teamIn
-	team.MapOutGoroutine[ChannelID] = teamOut
-	team.Mutex.Unlock()
+	team.Lock()
+	team.MapInGoroutine[ChannelID] = make(chan *khl.TextMessageContext, 1)
+	team.MapOutGoroutine[ChannelID] = make(chan *khl.TextMessageContext, 1)
+	// fmt.Println(team.MapInGoroutine)
+	team.Unlock()
+
+	defer func() {
+		team.Lock()
+		delete(team.MapInGoroutine, ChannelID)
+		delete(team.MapOutGoroutine, ChannelID)
+		team.Unlock()
+	}()
 
 	for {
 		select {
-		case in := <-teamIn:
+		case in := <-team.MapInGoroutine[ChannelID]:
 			TeamIn(dict, in, chanRS)
 			session.Logger.Warn().Interface("dict", dict).Str("Content", in.Common.Content).Msg("TeamStartChannel")
-		case out := <-teamOut:
+		case out := <-team.MapOutGoroutine[ChannelID]:
 			TeamOut(dict, out)
 			session.Logger.Warn().Interface("dict", dict).Str("Content", out.Common.Content).Msg("TeamStartChannel")
 		case <-chanRS:
@@ -179,11 +168,6 @@ func TeamIn(dict map[string]users, ctx *khl.TextMessageContext, close chan bool)
 	if len(RemovePrefix(ctx.Common.Content)) > 2 {
 		content := strings.Fields(RemovePrefix(ctx.Common.Content))
 		count, _ = strconv.Atoi(content[1])
-		if count < 1 || count > 4 {
-			SendTempMessage(ctx.Session, ctx.Common.TargetID, fmt.Sprintf("(met)%s(met) 输入参数错误！", ctx.Extra.Author.ID))
-			ctx.Session.Logger.Warn().Msgf("%s 输入参数错误！", ctx.Extra.Author.Username)
-			return
-		}
 	} else if len(RemovePrefix(ctx.Common.Content)) == 2 {
 		count = 1
 	}
